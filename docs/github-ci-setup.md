@@ -39,17 +39,21 @@ Changesets Action 内部逻辑是：
 
 #### A-2：选择 token 类型
 
-这个页面有个 **Generate New Token** 的黄色按钮。点它会出现一个选择界面，有三种 token：
+这个页面有个 **Generate New Token** 按钮。
+
+> **注意：** 如果你还没开启 2FA，npm **不会**展示 token 类型选择页，点击按钮直接跳到 Classic Token 创建页面。此时有两条路：
+> 1. **推荐：** 先去 `https://www.npmjs.com/settings/<你的用户名>/tfa` 开启 2FA，然后再回来点 Generate New Token，就能看到三种类型。
+> 2. **省事：** 直接创建 Classic Token（Type 选 **Publish**），也能在 CI 里正常 `npm publish`，只是不支持 npm provenance 签名。
+
+开启 2FA 后点按钮，会出现三种 token 类型的选择界面：
 
 | Token 类型 | 能用吗 | 为什么 |
 |---|---|---|
-| Classic Token | ⚠️ 看情况 | 如果你的 npm 账号开了 2FA（双因素认证），CI 环境里 npm 会自动弹出 2FA 验证码输入提示，但 GitHub Actions 里没有人能输这个码，所以 publish 会卡住。没用 2FA 的话可以 |
+| Classic Token | ⚠️ 看情况 | 如果开了 2FA，CI 环境里 npm 会自动弹出 2FA 验证码输入提示，但 GitHub Actions 里没有人能输这个码，所以 publish 会卡住。没开 2FA 的话可以 |
 | Granular Access Token | ❌ 不行 | 细粒度 token 设计用于"读取/安装"场景，不支持 `npm publish` 命令 |
 | Automation Token | ✅ 推荐 | 专为 CI/CD 设计，自动绕过 2FA，权限限定在 publish/read，不会给账号管理权限 |
 
-**选 Automation Token**。只要你用 GitHub Actions 发版，这是唯一可靠的选择。
-
-如果下拉里没有 Automation Token 选项，说明你的账号没开 2FA。去 `https://www.npmjs.com/settings/<你的用户名>/tfa` 开启双因素认证后再回来，Automation Token 选项就会出现。
+**选 Automation Token**。只要你用 GitHub Actions 发版且有 2FA，这是唯一可靠的选择。
 
 #### A-3：生成 token
 
@@ -197,14 +201,13 @@ GitHub 对 Actions 的默认权限策略是**最小权限原则**——只读。
 
 1. 打开 `https://github.com/yourbusiness/marcus-monorepo`
 2. 点顶部 **Settings** tab（如果 Settings 不显示，说明你不是仓库管理员，需要找 owner 操作）
-3. 左侧竖排菜单往下拉，找到 **Actions**，点它展开（不要直接点 Actions 到 Actions 运行页面，要展开后点下面的 **General**）
+3. 左侧竖排菜单往下拉，找到 **Actions**，点它展开
 4. 点开 **General** 后，页面往下滚动，找到 **Workflow permissions** 区块
 5. 你会看到两个单选项：
    - ☐ **Read repository contents and packages permissions**（默认选中）
    - ☐ **Read and write permissions**（我们需要这个）
 6. 勾选 **Read and write permissions**
-7. 左侧会出现一个提示，建议你按 workflow 文件里的 `permissions` 字段做更细粒度的控制——你的 release.yml 已经写了 `permissions: { contents: write, pull-requests: write, id-token: write }`，所以已经是最细粒度的了，不需要额外操作
-8. 滚动到页面最底部，点绿色 **Save** 按钮
+7. 滚动到页面最底部，点绿色 **Save** 按钮
 
 **如果不保存**，改动不会生效。GitHub 的 Settings 页面每个区块都是独立保存的。
 
@@ -219,23 +222,6 @@ GitHub 对 Actions 的默认权限策略是**最小权限原则**——只读。
 3. 勾选它
 4. 滚动到页面底部，点绿色 **Save**
 
-**这个设置控制什么？**
-
-GitHub 默认不允许自动化工具（包括 Actions）创建 PR，只允许人类用户通过 UI 创建。这是为了防止恶意 workflow 自动提交恶意 PR。
-
-对于 Changesets 来说，Create Release Pull Request 步骤就是自动创建 PR 的过程——它不在浏览器里点按钮，而是通过 GitHub REST API 调用 `POST /repos/{owner}/{repo}/pulls`。如果这个复选框没勾，GitHub 服务端直接拒绝这个 API 调用，返回 403。
-
-勾选后，Action 创建的 PR 会显示是由 `github-actions[bot]` 这个机器人账号提交的。
-
-### 设置后的效果验证
-
-全部配置完成后，你的仓库 Actions 权限状态应该是：
-
-- Workflow permissions: **Read and write**
-- Allow Actions to create PRs: **已勾选**
-
-此时 release 工作流拥有全部三项权限：`contents: write`、`pull-requests: write`、`id-token: write`。
-
 ### 常见问题
 
 **Q: 我只改了 Workflow permissions 为读写，没勾"允许 Actions 创建 PR"，会怎样？**
@@ -246,13 +232,7 @@ CI 工作流（`ci.yml`）不受影响，因为 CI 不需要创建 PR。但 rele
 HttpError: Resource not accessible by integration
 ```
 
-这是因为 Changesets 调用 `POST /repos/{owner}/{repo}/pulls` 被 GitHub 拒绝了。
-
-**Q: 我如果不想放开全局权限，能不能只针对 release.yml 放开？**
-
-可以。Workflow permissions 保持默认的 **Read**，然后在 release.yml 所在的 `.github/workflows/` 目录下，GitHub 会识别 workflow 文件内声明的 `permissions` 字段。前提是 Settings → Actions → General → 最底部的 **"Allow GitHub Actions to create and approve pull requests"** 依然要勾选，这个没有按 workflow 级别的控制。
-
-但是，如果 Workflow permissions 选的是 **Read**，那么即使你的 release.yml 声明了 `permissions: { contents: write }`，GitHub **仍然会以仓库级设置为准**，把权限降级为只读。所以 Workflow permissions 必须选 **Read and write**，才能让 workflow 文件里的权限声明生效。
+这是因为 Changesets 调用 GitHub API `POST /repos/{owner}/{repo}/pulls` 被拒绝了。
 
 **Q: provenance 不开行不行？**
 
