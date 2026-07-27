@@ -1,0 +1,56 @@
+{
+  "name": "@marcus/excel-exporter",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "High-performance Excel export engine built on modern-xlsx (Rust + WASM).",
+  "license": "MIT",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles": {
+      "types": "./dist/style-presets.d.ts",
+      "import": "./dist/style-presets.js"
+    },
+    "./worker-utils": {
+      "types": "./dist/worker-utils.d.ts",
+      "import": "./dist/worker-utils.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "modern-xlsx": "^1.2.0"
+  },
+  "peerDependenciesMeta": {},
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "excel",
+    "xlsx",
+    "export",
+    "wasm",
+    "monorepo"
+  ],
+  "devDependencies": {
+    "modern-xlsx": "1.2.0"
+  }
+}

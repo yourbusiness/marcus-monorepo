@@ -1,0 +1,122 @@
+import type { ExportOptions, ExportResult, ExportMode } from './types';
+import { WorkbookBuilder } from './workbook-builder';
+import { exportAsStream } from './streaming-builder';
+import { exportInWorker } from './worker-exporter';
+import { exportWithSheetJS } from './fallback';
+import { triggerDownload, toBlobPart } from './download';
+import { getWasmLoader } from './wasm-loader';
+
+export * from './types';
+export * from './style-presets';
+export * from './format-utils';
+export { configureWasm, getWasmLoader } from './wasm-loader';
+export { WorkbookBuilder } from './workbook-builder';
+export { exportAsStream } from './streaming-builder';
+export { StylePresets } from './style-presets';
+
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const STREAM_THRESHOLD = 50_000; // Workbook.toBuffer cliff starts ~55k rows
+const WORKER_THRESHOLD = 500; // main-mode sync work is acceptable only below this
+
+type PickedMode = { mode: ExportMode; workerMode?: 'workbook' | 'stream' };
+
+/**
+ * Auto mode selection (verified against independent-process benchmarks).
+ * - main fully blocks the thread; only for Node/SSR or browser <500 rows.
+ * - browser >=500 rows go to a worker (main thread does one structured clone).
+ * - inside the worker, >=50k rows use stream (avoids the toBuffer cliff).
+ */
+function pickMode(options: ExportOptions, totalRows: number): PickedMode {
+  const explicit = options.mode ?? 'auto';
+  if (explicit === 'stream') return { mode: 'stream', workerMode: 'stream' };
+  if (explicit === 'worker')
+    return { mode: 'worker', workerMode: totalRows >= STREAM_THRESHOLD ? 'stream' : 'workbook' };
+  if (explicit === 'main') return { mode: 'main' };
+
+  // auto
+  const isBrowser = typeof Worker !== 'undefined' && typeof window !== 'undefined';
+  if (!isBrowser) {
+    return totalRows >= STREAM_THRESHOLD ? { mode: 'stream', workerMode: 'stream' } : { mode: 'main' };
+  }
+  if (totalRows < WORKER_THRESHOLD) return { mode: 'main' };
+  if (totalRows >= STREAM_THRESHOLD) return { mode: 'worker', workerMode: 'stream' };
+  return { mode: 'worker', workerMode: 'workbook' };
+}
+
+/**
+ * Export to Excel (main entry).
+ *
+ * @example
+ * ```ts
+ * import { exportExcel, StylePresets } from '@marcus/excel-exporter';
+ *
+ * await exportExcel({
+ *   filename: 'sales-report',
+ *   sheets: [{
+ *     name: 'Sales', freezeRows: 1, autoFilter: true,
+ *     columns: [
+ *       { key: 'product', header: 'Product', width: 20 },
+ *       { key: 'revenue', header: 'Revenue', width: 15, style: StylePresets.currency },
+ *     ],
+ *     data: [{ product: 'Widget', revenue: 9999.99 }],
+ *   }],
+ * });
+ * ```
+ */
+export async function exportExcel(options: ExportOptions): Promise<ExportResult> {
+  const start = performance.now();
+  const totalRows = options.sheets.reduce((s, sh) => s + sh.data.length, 0);
+
+  const loader = getWasmLoader();
+  if (!loader.supported) {
+    return exportWithSheetJS(options, start, 'WebAssembly not supported');
+  }
+
+  const picked = pickMode(options, totalRows);
+
+  // Node main/stream: execute directly on this thread (no Web Worker available).
+  if (picked.mode === 'main' || (picked.mode === 'stream' && typeof window === 'undefined')) {
+    try {
+      await loader.ensureLoaded();
+      let result: ExportResult;
+      if (picked.workerMode === 'stream') {
+        const { bytes, rowCount } = await exportAsStream(options.sheets);
+        result = {
+          success: true,
+          blob: new Blob([toBlobPart(bytes)], { type: XLSX_MIME }),
+          engine: 'modern-xlsx',
+          mode: 'stream',
+          duration: performance.now() - start,
+          rowCount,
+        };
+      } else {
+        const builder = await WorkbookBuilder.create();
+        options.sheets.forEach((s) => builder.addSheet(s));
+        const bytes = await builder.toBuffer();
+        result = {
+          success: true,
+          blob: new Blob([toBlobPart(bytes)], { type: XLSX_MIME }),
+          engine: 'modern-xlsx',
+          mode: 'main',
+          duration: performance.now() - start,
+          rowCount: totalRows,
+        };
+      }
+      if (options.download !== false) triggerDownload(result.blob!, options.filename);
+      return result;
+    } catch (e) {
+      return exportWithSheetJS(options, start, (e as Error).message);
+    }
+  }
+
+  // Browser worker mode: offload to worker (main thread does one structured clone).
+  try {
+    const result = await exportInWorker(options, picked.workerMode!);
+    if (result.success && options.download !== false) {
+      triggerDownload(result.blob!, options.filename);
+    }
+    return result;
+  } catch (e) {
+    return exportWithSheetJS(options, start, (e as Error).message);
+  }
+}
