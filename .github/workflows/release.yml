@@ -12,14 +12,17 @@ jobs:
       contents: write
       pull-requests: write
       id-token: write
+    env:
+      HUSKY: "0"
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - uses: pnpm/action-setup@v4
-        with: { version: 9 }
+        # version omitted: action reads `packageManager` from package.json
+        # (pnpm@9.12.0), keeping CI in sync with local corepack.
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
@@ -28,9 +31,17 @@ jobs:
         with:
           publish: pnpm release
           version: pnpm version-packages
-          commit: 'chore: release packages'
-          title: 'chore: release packages'
+          commit: "chore: release packages"
+          title: "chore: release packages"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT so the Version PR triggers ci.yml. The default GITHUB_TOKEN is
+          # exempt from GitHub's anti-recursion rule (it cannot trigger other
+          # workflows). Create a fine-grained PAT (contents:write,
+          # pull-requests:write) and store it as repo secret
+          # CHANGESETS_GITHUB_TOKEN. Falls back to GITHUB_TOKEN if unset.
+          GITHUB_TOKEN: ${{ secrets.CHANGESETS_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: 'true'
+          NPM_CONFIG_PROVENANCE: "true"
+          # setup-node's registry-url writes ~/.npmrc reading this var; this is
+          # the token `changesets publish` -> `npm publish` actually picks up.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

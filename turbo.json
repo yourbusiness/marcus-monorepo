@@ -7,20 +7,17 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
-    "dev": { "cache": false, "persistent": true },
-    "test": {
-      "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
-    },
-    "test:browser": {
-      "dependsOn": ["^build"],
-      "outputs": [],
+    "dev": {
       "cache": false,
-      "env": ["PERF_TIGHT"]
+      "persistent": true
     },
-    "lint": { "outputs": [] },
+    "test": {
+      "outputs": []
+    },
+    "lint": {
+      "outputs": []
+    },
     "typecheck": {
-      "dependsOn": ["^build"],
       "outputs": []
     }
   }

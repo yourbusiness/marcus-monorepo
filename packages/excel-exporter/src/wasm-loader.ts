@@ -1,11 +1,11 @@
-import { initWasm } from 'modern-xlsx';
+import { initWasm } from "modern-xlsx";
 
-export type LoadState = 'idle' | 'loading' | 'ready' | 'error';
+export type LoadState = "idle" | "loading" | "ready" | "error";
 
 export interface LoaderOptions {
   /** Self-hosted WASM URL. Strongly recommended in production to avoid CDN drift. */
   wasmUrl?: string | URL;
-  /** Self-hosted export.worker.mjs URL, required for worker mode. */
+  /** Self-hosted export.worker.js URL, required for worker mode. */
   workerUrl?: string | URL;
   /** Per-attempt load timeout, default 10s. */
   timeoutMs?: number;
@@ -14,7 +14,7 @@ export interface LoaderOptions {
 }
 
 class WasmLoader {
-  private state: LoadState = 'idle';
+  private state: LoadState = "idle";
   private promise: Promise<void> | null = null;
   private opts: LoaderOptions;
 
@@ -23,45 +23,74 @@ class WasmLoader {
   }
 
   get supported(): boolean {
-    return typeof WebAssembly !== 'undefined' && typeof WebAssembly.instantiate === 'function';
+    return (
+      typeof WebAssembly !== "undefined" &&
+      typeof WebAssembly.instantiate === "function"
+    );
   }
 
   get isReady(): boolean {
-    return this.state === 'ready';
+    return this.state === "ready";
   }
 
   getOptions(): Readonly<LoaderOptions> {
     return this.opts;
   }
 
+  /**
+   * Merge new options into the current set. If the WASM URL changes while the
+   * loader is already ready (or mid-load), reset so the next ensureLoaded
+   * re-initializes from the new URL; otherwise keep the loaded state. This avoids
+   * discarding an already-loaded WASM module when only timeouts/retries change.
+   */
+  updateOptions(opts: LoaderOptions): void {
+    const urlChanged =
+      opts.wasmUrl !== undefined && opts.wasmUrl !== this.opts.wasmUrl;
+    this.opts = { ...this.opts, ...opts };
+    if (urlChanged && this.state !== "idle") {
+      this.state = "idle";
+      this.promise = null;
+    }
+  }
+
   async ensureLoaded(): Promise<void> {
-    if (this.state === 'ready') return;
+    if (this.state === "ready") return;
+    if (this.state === "error") {
+      throw new Error(
+        "[excel-exporter] WASM load previously failed; call configureWasm() to retry with new settings",
+      );
+    }
     if (this.promise) return this.promise;
     this.promise = this.loadWithRetry();
     try {
       await this.promise;
-      this.state = 'ready';
+      this.state = "ready";
     } catch (e) {
-      this.state = 'error';
-      this.promise = null;
+      this.state = "error";
       throw e;
     }
   }
 
   private async loadWithRetry(): Promise<void> {
     if (!this.supported) {
-      throw new Error('[excel-exporter] WebAssembly not supported in this environment');
+      throw new Error(
+        "[excel-exporter] WebAssembly not supported in this environment",
+      );
     }
     const wasmUrl = this.opts.wasmUrl;
     const timeoutMs = this.opts.timeoutMs ?? 10_000;
     const maxRetries = this.opts.maxRetries ?? 3;
     let lastErr: unknown;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`WASM load timeout (attempt ${attempt})`)), timeoutMs),
-      );
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`WASM load timeout (attempt ${attempt})`)),
+          timeoutMs,
+        );
+      });
       try {
-        this.state = 'loading';
+        this.state = "loading";
         await Promise.race([initWasm(wasmUrl), timeout]);
         return;
       } catch (e) {
@@ -69,19 +98,30 @@ class WasmLoader {
         if (attempt < maxRetries) {
           await new Promise((r) => setTimeout(r, 300 * 2 ** (attempt - 1)));
         }
+      } finally {
+        // Clear the pending timeout so a late reject never surfaces as an
+        // unhandled promise rejection after initWasm already resolved.
+        if (timer) clearTimeout(timer);
       }
     }
-    throw new Error(`[excel-exporter] WASM load failed after ${maxRetries} attempts: ${(lastErr as Error).message}`);
+    throw new Error(
+      `[excel-exporter] WASM load failed after ${maxRetries} attempts: ${(lastErr as Error).message}`,
+    );
   }
 }
 
-let defaultLoader: WasmLoader = new WasmLoader();
+const defaultLoader: WasmLoader = new WasmLoader();
 
 export function getWasmLoader(): WasmLoader {
   return defaultLoader;
 }
 
-/** Inject CDN / self-hosted URLs and timeout config at app entry. */
+/**
+ * Inject CDN / self-hosted URLs and timeout config at app entry. Merges into the
+ * existing loader rather than replacing it, so an already-loaded WASM module is
+ * kept unless the WASM URL actually changes (in which case the next ensureLoaded
+ * re-initializes from the new URL).
+ */
 export function configureWasm(opts: LoaderOptions): void {
-  defaultLoader = new WasmLoader(opts);
+  defaultLoader.updateOptions(opts);
 }

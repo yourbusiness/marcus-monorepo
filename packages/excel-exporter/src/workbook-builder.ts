@@ -1,11 +1,17 @@
-import { Workbook, sheetAddAoa, encodeCellRef, type Worksheet } from 'modern-xlsx';
-import type { SheetConfig } from './types';
-import { buildStyleIndex } from './style-utils';
-import { getWasmLoader } from './wasm-loader';
-import { resolveCellFormat } from './format-utils';
-import { toBlobPart } from './download';
+import {
+  Workbook,
+  sheetAddAoa,
+  encodeCellRef,
+  type Worksheet,
+} from "modern-xlsx";
+import type { SheetConfig, ColumnConfig } from "./types";
+import { buildStyleIndex } from "./style-utils";
+import { getWasmLoader } from "./wasm-loader";
+import { resolveCellFormat, numFormatForSpec } from "./format-utils";
+import { toBlobPart } from "./download";
 
-const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const XLSX_MIME =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 /**
  * Workbook builder -- batch write path. All data goes through `sheetAddAoa`
@@ -25,17 +31,27 @@ export class WorkbookBuilder {
   }
 
   addSheet(config: SheetConfig): this {
-    const headers = config.columns.map((c) => c.header);
-    const rows = config.data.map((item) => config.columns.map((col) => resolveCellFormat(col, item)));
+    // Auto-inject an Excel numFormat for typed FormatSpecs (date/datetime/number)
+    // so the cell renders correctly without forcing the caller to also set
+    // style.numFormat (otherwise dates show as raw serials, numbers as text).
+    const columns = config.columns.map(withAutoNumFormat);
+    const headers = columns.map((c) => c.header);
+    const rows = config.data.map((item) =>
+      columns.map((col) => resolveCellFormat(col, item)),
+    );
     const aoa = [headers, ...rows];
 
     const ws = this.wb.addSheet(config.name);
-    sheetAddAoa(ws, aoa, { origin: 'A1' });
+    sheetAddAoa(ws, aoa, { origin: "A1" });
 
-    return this.applyLayout(ws, config, rows.length);
+    return this.applyLayout(ws, { ...config, columns }, rows.length);
   }
 
-  private applyLayout(ws: Worksheet, config: SheetConfig, dataRowCount: number): this {
+  private applyLayout(
+    ws: Worksheet,
+    config: SheetConfig,
+    dataRowCount: number,
+  ): this {
     // Column widths (1-based)
     config.columns.forEach((c, i) => {
       if (c.width !== undefined) ws.setColumnWidth(i + 1, c.width);
@@ -62,7 +78,9 @@ export class WorkbookBuilder {
 
     // Auto-filter over header range A1:<lastCol><lastRow>
     if (config.autoFilter) {
-      const lastCol = encodeCellRef(0, config.columns.length - 1).match(/[A-Z]+/)![0];
+      const lastCol = encodeCellRef(0, config.columns.length - 1).match(
+        /[A-Z]+/,
+      )![0];
       ws.autoFilter = `A1:${lastCol}${dataRowCount + 1}`;
     }
 
@@ -86,4 +104,18 @@ export class WorkbookBuilder {
     const bytes = await this.toBuffer();
     return new Blob([toBlobPart(bytes)], { type: XLSX_MIME });
   }
+}
+
+/**
+ * If a column has a typed FormatSpec (date/datetime/number) but no explicit
+ * style.numFormat, inject the matching Excel numFormat so the value displays
+ * correctly. Explicit numFormat on the column style always wins.
+ */
+function withAutoNumFormat(c: ColumnConfig): ColumnConfig {
+  const spec = typeof c.format === "object" ? c.format : null;
+  const nf = spec ? numFormatForSpec(spec) : null;
+  if (nf && !c.style?.numFormat) {
+    return { ...c, style: { ...(c.style ?? {}), numFormat: nf } };
+  }
+  return c;
 }

@@ -4,19 +4,34 @@
   "type": "module",
   "description": "High-performance Excel export engine built on modern-xlsx (Rust + WASM).",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourbusiness/marcus-monorepo.git",
+    "directory": "packages/excel-exporter"
+  },
+  "bugs": {
+    "url": "https://github.com/yourbusiness/marcus-monorepo/issues"
+  },
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./styles": {
       "types": "./dist/style-presets.d.ts",
-      "import": "./dist/style-presets.js"
+      "import": "./dist/style-presets.js",
+      "default": "./dist/style-presets.js"
     },
     "./worker-utils": {
       "types": "./dist/worker-utils.d.ts",
-      "import": "./dist/worker-utils.js"
+      "import": "./dist/worker-utils.js",
+      "default": "./dist/worker-utils.js"
+    },
+    "./dist/export.worker.js": {
+      "import": "./dist/export.worker.js",
+      "default": "./dist/export.worker.js"
     }
   },
   "files": [
@@ -37,9 +52,14 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "modern-xlsx": "^1.2.0"
+    "modern-xlsx": "^1.2.0",
+    "xlsx": ">=0.18.5"
   },
-  "peerDependenciesMeta": {},
+  "peerDependenciesMeta": {
+    "xlsx": {
+      "optional": true
+    }
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -51,6 +71,7 @@
     "monorepo"
   ],
   "devDependencies": {
-    "modern-xlsx": "1.2.0"
+    "modern-xlsx": "1.2.0",
+    "xlsx": "0.18.5"
   }
 }

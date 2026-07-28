@@ -4,8 +4,8 @@ High-performance Excel export engine built on [modern-xlsx](https://github.com/A
 
 ## Packages
 
-| Package | Description |
-|---------|-------------|
+| Package                                               | Description                                                |
+| ----------------------------------------------------- | ---------------------------------------------------------- |
 | [`@marcus/excel-exporter`](./packages/excel-exporter) | Core Excel export library (WASM-backed, styled, streaming) |
 
 ## Quick start
@@ -16,4 +16,4 @@ pnpm build
 pnpm test
 ```
 
-Requires Node >= 22 (modern-xlsx@1.2.0 engines asks for >=24; the runtime target is the browser).
+Requires Node >= 22. Note: modern-xlsx@1.2.0 declares `engines: node>=24`, but the package runtime target is the browser and all 24 tests pass on Node 22; the dependency is pinned to exactly `1.2.0` so a future minor with Node 24-only APIs cannot sneak in. Re-verify if you upgrade modern-xlsx.

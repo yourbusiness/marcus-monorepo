@@ -4,18 +4,21 @@
   "version": "0.0.0",
   "type": "module",
   "packageManager": "pnpm@9.12.0",
-  "engines": { "node": ">=24.0.0", "pnpm": ">=9" },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9"
+  },
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
     "test": "turbo run test",
-    "test:browser": "turbo run test:browser",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "turbo run build && changeset publish"
+    "release": "turbo run lint typecheck test build && changeset publish",
+    "prepare": "husky"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

@@ -1,7 +1,9 @@
-import type { ExportOptions, ExportResult } from './types';
-import { triggerDownload } from './download';
+import type { ExportOptions, ExportResult } from "./types";
+import { displayValue } from "./format-utils";
+import { triggerDownload } from "./download";
 
-const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const XLSX_MIME =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 // SheetJS is an optional peerDep. Both the local 'xlsx' module and the CDN URL
 // lack type declarations in this workspace, so the loader is typed loosely.
@@ -14,17 +16,23 @@ type SheetJSApi = {
   write(wb: unknown, opts: { type: string; bookType: string }): ArrayBuffer;
 };
 
-function cast<T>(m: unknown): T { return m as T; }
+function cast<T>(m: unknown): T {
+  return m as T;
+}
 
 async function loadSheetJS(): Promise<SheetJSApi> {
   try {
-    // @ts-expect-error -- optional peerDep, may not be installed
-    return cast<SheetJSApi>(await import('xlsx'));
+    // @vite-ignore: bare optional peer; must stay runtime-only so consumers
+    // who did not install xlsx do not get a build-time resolve error.
+    return cast<SheetJSApi>(await import(/* @vite-ignore */ "xlsx"));
   } catch {
     // Consumer did not install xlsx; load from the SheetJS official CDN
     // (npm xlsx@0.18.5 has been unmaintained since 2022).
-    // @ts-expect-error -- remote URL has no type declaration
-    return cast<SheetJSApi>(await import(/* @vite-ignore */ 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs'));
+    // A `string`-typed (non-literal) specifier makes TS skip module resolution
+    // (import() then resolves to Promise<any>), so no @ts-expect-error is needed.
+    const cdnUrl: string =
+      "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs";
+    return cast<SheetJSApi>(await import(/* @vite-ignore */ cdnUrl));
   }
 }
 
@@ -38,32 +46,42 @@ export async function exportWithSheetJS(
   start: number,
   reason: string,
 ): Promise<ExportResult> {
-  console.warn(`[excel-exporter] Falling back to SheetJS (styles stripped). Reason: ${reason}`);
+  console.warn(
+    `[excel-exporter] Falling back to SheetJS (styles stripped). Reason: ${reason}`,
+  );
   try {
     const XLSX = await loadSheetJS();
     const wb = XLSX.utils.book_new();
     for (const s of options.sheets) {
       const aoa = [
         s.columns.map((c) => c.header),
-        ...s.data.map((row) => s.columns.map((c) => row[c.key] ?? '')),
+        // Apply FormatSpec (enum/padding/number/date) for data semantics; dates
+        // format to readable strings since SheetJS CE has no style-write support.
+        ...s.data.map((row) => s.columns.map((c) => displayValue(c, row))),
       ];
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       XLSX.utils.book_append_sheet(wb, ws, s.name);
     }
-    const out = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
     const blob = new Blob([out], { type: XLSX_MIME });
     if (options.download !== false) triggerDownload(blob, options.filename);
     const totalRows = options.sheets.reduce((s, sh) => s + sh.data.length, 0);
     return {
       success: true,
       blob,
-      engine: 'sheetjs',
-      mode: 'main',
+      engine: "sheetjs",
+      mode: "main",
       duration: performance.now() - start,
       rowCount: totalRows,
-      error: new Error('Fallback: styles stripped (SheetJS CE has no style-write support)'),
+      error: new Error(
+        "Fallback: styles stripped (SheetJS CE has no style-write support)",
+      ),
     };
   } catch (e) {
-    return { success: false, error: e as Error, duration: performance.now() - start };
+    return {
+      success: false,
+      error: e as Error,
+      duration: performance.now() - start,
+    };
   }
 }

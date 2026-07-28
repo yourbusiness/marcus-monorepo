@@ -3,19 +3,29 @@ on:
   pull_request:
   push:
     branches: [main]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   quality:
     runs-on: ubuntu-latest
+    env:
+      HUSKY: "0"
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: pnpm/action-setup@v4
-        with: { version: 9 }
+        # version omitted: action reads `packageManager` from package.json
+        # (pnpm@9.12.0), keeping CI in sync with local corepack.
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Lint commit messages
+        if: github.event_name == 'pull_request'
+        run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to HEAD
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
