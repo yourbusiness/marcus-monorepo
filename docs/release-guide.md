@@ -259,7 +259,7 @@ git commit -m "fix(excel-exporter): 修复了某个问题"
 - **pre-commit**：跑 `lint-staged`，对你改的文件做 `eslint --fix` + `prettier --write`（自动修正格式）。
 - **commit-msg**：跑 `commitlint`，检查提交信息格式对不对。格式错了会报错、中止提交，改对再 commit。
 
-> 这两个钩子只在本地拦你。CI 里设了 `HUSKY: "0"` 跳过它们（CI 自己有 lint 步骤）。
+> 这两个钩子只在本地拦你。CI 里设了 `HUSKY: "0"` 跳过 husky 钩子，但 CI workflow 里有独立的 commitlint 步骤（仅 PR 时跑，检查提交信息）和独立的 lint 步骤——该查的 CI 自己查，只是不走 husky。
 
 ## 2.6 推送（push）
 
@@ -279,8 +279,9 @@ push 到 main 后，GitHub Actions 同时启动两个 workflow：
 
 ### CI 流水线（`ci.yml`）——质量检查
 
-跑 `pnpm install` → `lint` → `typecheck` → `test` → `build`。
+跑 `pnpm install` → `commitlint`（仅 PR 时）→ `lint` → `typecheck` → `test` → `build`。
 
+- commitlint 这一步只在 **PR** 时跑，检查 PR 里所有提交信息格式；直接 push 到 main 不跑。
 - 失败了**只是亮红灯**，不会阻止发版（它和 Release 互不影响）。
 - 它的作用是让你在网页上一眼看到代码质量有没有问题。
 
@@ -371,7 +372,7 @@ turbo run lint typecheck test build && changeset publish
                                                                           版本号 +1
 ```
 
-**耗时参考**：从 push 到包出现在 npm，如果一切顺利，大概 5~~10 分钟（CI 跑 2~~4 分钟 + 你审核 PR 的时间 + Release 再跑 2~4 分钟）。
+**耗时参考**：从 push 到包出现在 npm，如果一切顺利，大概 5 到 10 分钟（CI 跑 2 到 4 分钟 + 你审核 PR 的时间 + Release 再跑 2 到 4 分钟）。
 
 ---
 
@@ -381,12 +382,12 @@ turbo run lint typecheck test build && changeset publish
 
 ## 4.1 push 后 CI 红灯
 
-| 你看到的                                           | 原因                             | 解法                                                       |
-| -------------------------------------------------- | -------------------------------- | ---------------------------------------------------------- |
-| `expected X to be less than Y`（performance 测试） | CI 电脑比你慢，性能测试超时      | 性能测试在 CI 跳过：`RUN_PERF=0`（已配）                   |
-| perf 测试明明该跳过却还在跑                        | turbo 过滤了 `RUN_PERF` 环境变量 | 确认 `turbo.json` 的 `globalEnv` 里有 `"RUN_PERF"`（已配） |
-| 本地能过、CI 过不了                                | 你在子目录直接跑，绕过了 turbo   | 本地验证走根目录 `pnpm xxx`，和 CI 一致                    |
-| `Lockfile is up to date` 报错                      | 锁文件和 package.json 不同步     | 本地 `pnpm install` 更新锁文件后提交                       |
+| 你看到的                                                | 原因                             | 解法                                                       |
+| ------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------- |
+| `expected X to be less than Y`（performance 测试）      | CI 电脑比你慢，性能测试超时      | 性能测试在 CI 跳过：`RUN_PERF=0`（已配）                   |
+| perf 测试明明该跳过却还在跑                             | turbo 过滤了 `RUN_PERF` 环境变量 | 确认 `turbo.json` 的 `globalEnv` 里有 `"RUN_PERF"`（已配） |
+| 本地能过、CI 过不了                                     | 你在子目录直接跑，绕过了 turbo   | 本地验证走根目录 `pnpm xxx`，和 CI 一致                    |
+| `ERR_PNPM_OUTDATED_LOCKFILE` / `--frozen-lockfile` 失败 | 锁文件和 package.json 不同步     | 本地 `pnpm install` 更新锁文件后提交                       |
 
 ## 4.2 push 后 Release 失败
 
