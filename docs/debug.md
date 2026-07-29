@@ -342,92 +342,182 @@ push 后 CI 和 Release 同时起跑。预期：
 
 把整个排障过程中遇到的问题按类别归一遍，供对照：
 
-**1. CI 失败**
+**1. CI 失败（第一根因）**
 
 - 根因：性能测试用墙钟时间做绝对断言，shared runner 抖动必然 flake。
 - 修复：`RUN_PERF` 开关，CI 跳过、本地保留。
 
-**2. Release 失败**
+**2. Release 失败（第一根因）**
 
 - 根因：同 CI——`pnpm release` 里的 `turbo run ... test` 被 perf 测试挡住，`&&` 短路，`changeset publish` 跑不到。
 - 修复：同 CI 的 `RUN_PERF` 开关（release.yml 的 job env）。
 
-**3. push 被拒**
+**3. CI / Release 第二次失败（第二根因，关键）**
+
+- 根因：`RUN_PERF` 只在 ci.yml / release.yml 声明了，但没在 `turbo.json` 的 `globalEnv` 声明，turbo 的 Strict Mode 把它过滤掉，vitest 子进程拿不到。
+- 修复：`turbo.json` 的 `globalEnv` 加 `"RUN_PERF"`。
+- 教训：环境变量穿过多层进程时每一层都要放行；本地验证必须走和 CI 一致的调用路径（根目录 turbo，不是子目录直接跑）。
+
+**4. push 被拒**
 
 - 根因：排障期间机器人的 Version PR 已在远程合并，本地落后。
 - 修复：`git pull --rebase origin main`。
 
-**4. npm 查不到包**
+**5. npm 查不到包**
 
 - 根因：质量门禁把 publish 挡住了（问题 2 的连锁结果），不是 token 或 scope 问题。
-- 修复：随问题 2 一起解决。
+- 修复：随问题 2/3 一起解决。
 
-**5. publish 会失败的隐患（暴露在问题 2 解决后）**
+**6. publish 会失败的隐患（暴露在质量门禁修复后）**
 
 - 根因：npm 用户名 `marcus_w` 不持有 `@marcus` scope。
 - 修复：新建 npm org `marcusok`，包名改为 `@marcusok/excel-exporter`。
 
-**6. 测试 changeset 残留**
+**7. 测试 changeset 残留**
 
 - 根因：旧版文档验证步骤的遗留文件没删。
 - 修复：`git rm`。
 
-**7. PowerShell 脚本编码事故（排障过程引入）**
+**8. PowerShell 脚本编码事故（排障过程引入）**
 
 - 根因：批量脚本递归误伤 + GBK/BOM 编码损坏。
 - 修复：git 原始内容 + .NET UTF8 无 BOM 重写 + `pnpm install --force`。
 
 ---
 
-## 12. 待观察
+## 12. 三轮失败完整时间线
 
-push 后两条 workflow 的最终结果待确认。如果 Release 全绿，`@marcusok/excel-exporter@0.1.1` 将首次出现在 [npmjs.com](https://www.npmjs.com/package/@marcusok/excel-exporter)。如果 Release 仍有红的，挂在哪一步、报错是什么，需要根据具体日志进一步处理——但质量门禁（perf）和 scope 归属这两个已知的拦路虎都已清除。
+整个排障跨了三轮 push，每一轮 CI 和 Release 都失败。下面把三轮的数据和根因对照清楚。
+
+### 第一轮：`cefad0e`（最初触发）
+
+- **原因不明确**，只有推断：本地全绿，猜测是 perf flake + Release 权限问题。
+- **CI**：推测 perf 测试超时（无日志佐证，但后续验证了这个方向）。
+- **Release**：推测卡在建 Version PR（`Resource not accessible by integration`）。
+- **结果**：Version PR 实际建出并 Merge 了（`cc879b9`），说明权限推断是错的。
+
+### 第二轮：`21c4f2a`（加了 RUN_PERF 开关 + 改 scope）
+
+这一轮加了 `RUN_PERF` 开关，但没改 turbo.json，所以开关没生效。
+
+**CI 日志**（实测数据）：
+
+```
+src/__tests__/performance.test.ts (4 tests | 1 failed) 4544ms
+  10k rows   490ms   expected 463 to be less than 300      ← FAIL
+  50k rows   1028ms                                          ← PASS（侥幸过）
+  100k rows  2888ms                                          ← PASS（侥幸过）
+```
+
+关键：perf 测试在跑（没被 skip），`RUN_PERF=0` 没生效。50k 和 100k 这次侥幸没超阈值，只有 10k 那条挂了，但本质问题没解决。
+
+**Release 日志**（实测数据）：
+
+```
+src/__tests__/performance.test.ts (4 tests | 3 failed) 8149ms
+  10k rows   1265ms   expected 1213 to be less than 300     ← FAIL
+  50k rows   2533ms   expected 2530 to be less than 1500    ← FAIL
+  100k rows  4188ms   expected 4186 to be less than 3000    ← FAIL
+```
+
+三条全挂，CI 比 CI 那次还慢（同一 runner、不同时刻，抖动差异）。最后：
+
+```
+Tasks: 3 successful, 4 total   ← lint/typecheck/build 都过了，只有 test 挂
+Error: Publish command exited with code 1   ← && 短路，changeset publish 跑不到
+```
+
+**两个数据对比说明**：CI 和 Release 跑在各自的 runner 上，性能数据有差异（Release 那次更慢，三条全挂），但根因完全相同——turbo 过滤了 `RUN_PERF`。
+
+### 第三轮：`87855d6`（补 turbo.json globalEnv，待验证）
+
+这一轮修复了 turbo.json，用根目录 turbo 路径本地验证通过：
+
+- `RUN_PERF=0` + `pnpm exec turbo run test --force` → perf 4 个全部 skip，其余 23 个通过。
+
+这是第一次用和 CI 一致的调用路径验证。结果待 push 后的 Actions 确认。
 
 ---
 
-## 13. 第三次失败：turbo Strict Mode 过滤了 RUN_PERF（关键修复）
+## 13. Release 失败的完整解读
 
-### 13.1 现象
+### 13.1 Release 日志逐行解读
 
-`21c4f2a` push 后，CI 和 Release **仍然挂在同一个 perf 测试上**：
+第二次失败时 Release 的日志，逐段说明：
 
 ```
-src/__tests__/performance.test.ts (4 tests | 1 failed)
-  10k rows x 4 cols (main) < 200ms   490ms   expected 463 to be less than 300
+@marcusok/excel-exporter#test
 ```
 
-注意：perf 测试在跑（没被 skip），说明 `RUN_PERF=0` 没生效。
+scope 名是 `@marcusok`，说明 `21c4f2a` 的 scope 重命名已生效。
 
-### 13.2 根因：turbo 的 Strict Mode
+```
+src/__tests__/performance.test.ts (4 tests | 3 failed) 8149ms
+```
 
-ci.yml 的改动是对的（`pnpm test` 那一步带了 `env: RUN_PERF: "0"`），但 `pnpm test` = `turbo run test`。**Turbo 默认启用 Strict Mode**（官方文档原文）：
+perf 测试在跑（没被 skip），3 条超阈值。证明 `RUN_PERF=0` 没传到 vitest。
+
+```
+Tasks: 3 successful, 4 total
+Failed: @marcusok/excel-exporter#test
+```
+
+lint、typecheck、build 三个 task 都过了，只有 test 挂。说明代码质量本身没问题，纯粹是 perf 测试的时间断言。
+
+```
+Error: Publish command exited with code 1
+```
+
+`pnpm release` 的脚本是 `turbo run lint typecheck test build && changeset publish`。test 失败 → `&&` 短路 → `changeset publish` 永远跑不到。这行不是 publish 本身报错，是 quality gate 失败的连锁结果。
+
+### 13.2 为什么 CI 和 Release 挂在同一个地方
+
+CI 和 Release 都调 `pnpm test`（= `turbo run test`），都经过 turbo。所以 turbo 的 Strict Mode 过滤 `RUN_PERF` 这个问题，两条流水线同时踩中。修 turbo.json 一个文件，两条一起解决。
+
+### 13.3 Release 比 CI 数据更差的原因
+
+CI 那次只有 1 条失败（10k），Release 那次 3 条全失败。这是因为 GitHub Actions 的不同 job 跑在不同 runner 实例上，shared runner 的 CPU/内存性能波动很大。这进一步印证了用绝对时间做断言不可靠——同一个 commit、同一段代码，不同 runner 上结果完全不同。
+
+---
+
+## 14. turbo Strict Mode 根因详解
+
+### 14.1 现象
+
+ci.yml 和 release.yml 的改动是对的（`RUN_PERF: "0"` 确实写了），但 perf 测试照样跑，说明环境变量没传到 vitest。
+
+### 14.2 根因
+
+调用链：GitHub Actions step（设 `RUN_PERF=0`）→ `pnpm test` → `turbo run test` → turbo 启动 vitest 子进程 → **turbo 在这层把未声明的环境变量过滤掉**。
+
+Turbo 官方文档原文：
 
 > Strict Mode is the default environment handling mechanism, ensuring that only explicitly configured environment variables are made available to tasks. Tasks will only see variables listed in `env`, `globalEnv`, `passThroughEnv`, or `globalPassThroughEnv`, with any unlisted variables being filtered out.
 
-`turbo.json` 的 `globalEnv` 当时是 `["NODE_ENV", "CI", "PERF_TIGHT"]`——有 `PERF_TIGHT` 但**没有 `RUN_PERF`**。所以 turbo 启动 vitest 子进程时把 `RUN_PERF=0` 过滤掉了，vitest 里 `process.env.RUN_PERF` 是 undefined，`RUN_PERF !== "0"` 为 true，测试照跑。
+`turbo.json` 的 `globalEnv` 当时是 `["NODE_ENV", "CI", "PERF_TIGHT"]`——有 `PERF_TIGHT`（所以它能生效），但**没有 `RUN_PERF`**（所以被过滤）。
 
-这就是为什么 `PERF_TIGHT` 一直能影响测试行为（它在 globalEnv 里），而新加的 `RUN_PERF` 不能（没在 globalEnv 里）。
+vitest 里 `process.env.RUN_PERF` 是 undefined → `undefined !== "0"` 为 true → `describe.runIf(true)` → 测试照跑。
 
-### 13.3 为什么本地验证没发现
+### 14.3 为什么本地验证没发现（疏漏复盘）
 
-我之前的本地验证是在 `packages/excel-exporter` 目录直接跑 `pnpm test`（= `vitest run`），**绕过了 turbo 这一层**，所以 `RUN_PERF=0` 能直接被 vitest 进程拿到，验证「通过」。
+之前的本地验证是在 `packages/excel-exporter` 目录直接跑 `pnpm test`（= `vitest run`），**绕过了 turbo 这一层**。vitest 进程直接继承了 shell 的 `RUN_PERF=0`，所以验证「通过」。
 
-但 CI 走的是根目录 `pnpm test`（= `turbo run test`），中间隔着 turbo 的环境变量过滤。本地验证没复现这条真实路径，是疏漏。
+但 CI 走的是**根目录** `pnpm test`（= `turbo run test`），中间隔着 turbo 的环境变量过滤。本地验证没复现这条真实路径。
 
-### 13.4 修复
+### 14.4 修复
 
-[turbo.json](/turbo.json) 的 `globalEnv` 加上 `RUN_PERF`：
+[turbo.json](/turbo.json) 的 `globalEnv` 加 `RUN_PERF`：
 
 ```json
 "globalEnv": ["NODE_ENV", "CI", "PERF_TIGHT", "RUN_PERF"],
 ```
 
-### 13.5 验证（这次用 turbo 真实路径）
+### 14.5 验证（这次走 turbo 真实路径）
 
-在**根目录**走 turbo 验证，复现 CI 的调用方式：
+在**根目录**用 `pnpm exec turbo run test` 验证，复现 CI 的调用方式：
 
-- `RUN_PERF` 不设（本地）：27 个测试全过，perf 照跑。✓
-- `RUN_PERF=0`（模拟 CI，走 `pnpm exec turbo run test --force`）：
+- `RUN_PERF` 不设（本地默认）：27 个测试全过，perf 照跑。
+- `RUN_PERF=0`（模拟 CI）：
 
 ```
 src/__tests__/performance.test.ts (4 tests | 4 skipped)
@@ -435,8 +525,20 @@ Test Files  4 passed | 1 skipped (5)
 Tests       23 passed | 4 skipped (27)
 ```
 
-4 个 perf 全部 skip，其余 23 个通过。这次是用 turbo 真实路径验证，和 CI 一致。
+4 个 perf 全部 skip，其余 23 个通过。这次走的是和 CI 完全一致的 turbo 路径。
 
-### 13.6 教训
+### 14.6 教训
 
-**环境变量要穿过多层进程时，每一层都要能放行。** 从 GitHub Actions step → turbo → vitest，中间 turbo 这层默认会拦。改测试行为的环境变量，必须同时在 turbo.json 声明。本地验证也必须走和 CI 完全一致的调用路径（根目录 turbo，不是子目录直接跑）。
+**环境变量要穿过多层进程时，每一层都要能放行。** 链路是 GitHub Actions → turbo → vitest，中间 turbo 默认拦截。改测试行为的环境变量，必须同时在 turbo.json 声明。本地验证也必须走和 CI 完全一致的调用路径——根目录 turbo，不是子目录直接跑。
+
+---
+
+## 15. 待观察
+
+push `87855d6` 后的结果待确认。这次三层都对齐了：
+
+- **ci.yml / release.yml**：设了 `RUN_PERF: "0"`。
+- **turbo.json**：`globalEnv` 声明了 `RUN_PERF`（这次的修复）。
+- **performance.test.ts**：`describe.runIf` 读 `RUN_PERF`。
+
+预期：CI 和 Release 的 perf 4 个测试显示 skipped，质量门禁通过。Release 的 `changeset publish` 将第一次真正执行，把 `@marcusok/excel-exporter@0.1.1` 发到 npm。如果仍有红的，挂在哪一步、报错是什么，需要根据具体日志进一步处理。
