@@ -17,7 +17,7 @@
 | 代码格式化  | Prettier                         | `package.json` devDependencies            |
 | Node 版本   | >= 22.0.0                        | `package.json` `engines`；`.nvmrc` = `22` |
 
-当前仓库只有一个可发布的包：`@marcus/excel-exporter`（v0.1.0），见 `packages/excel-exporter/package.json`。
+当前仓库只有一个可发布的包：`@marcusok/excel-exporter`（v0.1.0），见 `packages/excel-exporter/package.json`。
 
 ---
 
@@ -40,7 +40,7 @@ git diff --cached       # 暂存区里到底改了什么
 ls .changeset/*.md      # 列出当前所有 changeset
 ```
 
-本仓库现在有两个 changeset，都标 `@marcus/excel-exporter: patch`：
+本仓库现在有两个 changeset，都标 `@marcusok/excel-exporter: patch`：
 
 | 文件                                      | 实际内容（UTF-8，正常）                                                                                                          |
 | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -77,7 +77,7 @@ pnpm changeset
 
 交互式选择：
 
-1. 选择影响的包（`@marcus/excel-exporter`）
+1. 选择影响的包（`@marcusok/excel-exporter`）
 2. 选择版本级别：`patch` / `minor` / `major`
 3. 写一句 changelog 描述
 
@@ -300,7 +300,7 @@ turbo run lint typecheck test build && changeset publish
                                     turbo lint typecheck test build  ← 发版前最终质量兜底
                                     changeset publish                  （全过才发布）
                                                             ────→ 7. npm publish
-                                                                   @marcus/excel-exporter
+                                                                   @marcusok/excel-exporter
                                                                    版本号 +1
 ```
 
@@ -323,7 +323,7 @@ turbo run lint typecheck test build && changeset publish
 
 1. 打开 `https://www.npmjs.com/signup`
 2. 填写：
-   - **Username**：会是你包的 scope 名（当前包是 `@marcus/excel-exporter`，确认 scope 对得上），选好改不了
+   - **Username**：会是你包的 scope 名（当前包是 `@marcusok/excel-exporter`，确认 scope 对得上），选好改不了
    - **Email**：用来收验证邮件
    - **Password**：要有大小写字母和数字
 3. 勾选同意条款，Create Account
@@ -348,7 +348,7 @@ npm 网站创建 token 时有两类可选，**关键约束是 2FA**：账号开�
 3. 填写：
    - **Token name**：随便起，例如 `marcus-monorepo CI publish`
    - **Expiration**：建议设 1 年，到期前回来换新
-   - **Packages and scopes**：权限选 **Read and write**，把 scope 加进来（`@marcus`，或具体到 `@marcus/excel-exporter`）
+   - **Packages and scopes**：权限选 **Read and write**，把 scope 加进来（`@marcus`，或具体到 `@marcusok/excel-exporter`）
    - 账号开了 2FA 的话：勾选 **Allow bypass 2FA for this token**（或同类字样）—— 否则 CI 里没人能输入验证码，`npm publish` 会被 2FA 拦
 4. 点 **Generate Token**
 5. 页面顶部出现绿色提示，里面是一串 `npm_` 开头的字符串，**立刻复制**——这串只在这一次显示，刷新或关闭页面后 npm 不会再展示
@@ -441,7 +441,7 @@ CI 工作流（`ci.yml`）不受影响，它不需要创建 PR。但 Release wor
 
 ### 7.1 先清理：检查 main 上有没有残留的测试 changeset
 
-仓库 `origin/main` 上当前有一条测试残留 `.changeset/funny-pugs-leave.md`（内容「测试提交」，`@marcus/excel-exporter: patch`）——是旧版文档的验证步骤留下的。只要它还在，下一次任何 push 到 main 都会触发 Release workflow 开一个带「测试提交」的 Version PR。正式发版前删掉它：
+仓库 `origin/main` 上当前有一条测试残留 `.changeset/funny-pugs-leave.md`（内容「测试提交」，`@marcusok/excel-exporter: patch`）——是旧版文档的验证步骤留下的。只要它还在，下一次任何 push 到 main 都会触发 Release workflow 开一个带「测试提交」的 Version PR。正式发版前删掉它：
 
 ```bash
 git rm .changeset/funny-pugs-leave.md   # 如果已暂存删除，确认 push 即可

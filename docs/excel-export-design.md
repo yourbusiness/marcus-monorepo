@@ -1,6 +1,6 @@
-﻿# 高性能 Excel 导出引擎 · 技术开发文档
+# 高性能 Excel 导出引擎 · 技术开发文档
 
-> 包名：`@marcus/excel-exporter` ｜ 技术方案：modern-xlsx + WebAssembly ｜ 架构：pnpm Monorepo
+> 包名：`@marcusok/excel-exporter` ｜ 技术方案：modern-xlsx + WebAssembly ｜ 架构：pnpm Monorepo
 >
 > 本文档所有 API、性能数据、依赖版本均经过实际核对（modern-xlsx@1.2.0 npm tarball 解包 + `dist/index.d.mts` / `dist/validate-chart-D1O7LOfU.d.mts` 类型定义 + `dist/utils-Fc_qcAP_.mjs` / `dist/modern-xlsx.worker.js` 源码）。性能数字均经过**两次独立进程真机实测**（Node v22.22.2，4 列，独立进程首次跑），两组数据互相印证。
 
@@ -94,7 +94,7 @@
 
 - 技术选型与可行性（含真实 benchmark 与备选方案对比）
 - Monorepo 架构与工程化（构建、版本控制、Lint、CI/CD、发布）
-- `@marcus/excel-exporter` 核心包的完整模块设计与可运行代码
+- `@marcusok/excel-exporter` 核心包的完整模块设计与可运行代码
 - 性能优化、降级策略、Web Worker 集成
 - 实施计划、里程碑、风险与验收
 
@@ -282,7 +282,7 @@ marcus-monorepo/
 }
 ```
 
-> 📌 **Node 版本说明**：engines 要求 Node >=24.0.0 是因为核心依赖 modern-xlsx@1.2.0 自身要求 Node 24+（用于 dev/build/test 阶段，已核实 `npm view modern-xlsx` 的 `engines.node` 字段为 `>=24.0.0`）。`@marcus/excel-exporter` 的**运行时目标是浏览器**，消费方应用在浏览器中使用本包不依赖 Node 版本。但**开发、测试、构建**全链路都需要 Node 24（modern-xlsx 的 engines 要求会阻止在更低版本中 `pnpm install`），因此 monorepo 根目录与 `@marcus/excel-exporter` 的 engines 一致设为 `>=24.0.0`。CI 使用 Node 24 跑全流程；开发者本地建议通过 nvm/fnm 使用 Node 24；附 Node 升级指引（详见文末「附录 F · Node.js 升级指引」）。
+> 📌 **Node 版本说明**：engines 要求 Node >=24.0.0 是因为核心依赖 modern-xlsx@1.2.0 自身要求 Node 24+（用于 dev/build/test 阶段，已核实 `npm view modern-xlsx` 的 `engines.node` 字段为 `>=24.0.0`）。`@marcusok/excel-exporter` 的**运行时目标是浏览器**，消费方应用在浏览器中使用本包不依赖 Node 版本。但**开发、测试、构建**全链路都需要 Node 24（modern-xlsx 的 engines 要求会阻止在更低版本中 `pnpm install`），因此 monorepo 根目录与 `@marcusok/excel-exporter` 的 engines 一致设为 `>=24.0.0`。CI 使用 Node 24 跑全流程；开发者本地建议通过 nvm/fnm 使用 Node 24；附 Node 升级指引（详见文末「附录 F · Node.js 升级指引」）。
 
 > 📌 **`@types/node` / `@playwright/test` 落在根 devDependencies**：本 monorepo 所有包共享 TS 基线（`tsconfig.base.json` 含 `DOM`+`WebWorker`），`@types/node` 在根声明一次即可被子包通过 workspace 符号链接继承。`@playwright/test` 是 monorepo 级工具链（跑所有包的浏览器集成测试），故也放根目录；子包 `excel-exporter/package.json` 不重复声明。已核实 `npm view @playwright/test` latest = `1.62.0`、`npm view @types/node` 存在。
 
@@ -365,7 +365,7 @@ auto-install-peers=true
 }
 ```
 
-> `lib` 同时包含 `DOM` 与 `WebWorker`，因为 `@marcus/excel-exporter` 既要跑在主线程（`Blob`、`document`）也要跑在 Worker（`self.postMessage`）。这避免了「Worker 文件引用 DOM 类型报错」的常见坑。
+> `lib` 同时包含 `DOM` 与 `WebWorker`，因为 `@marcusok/excel-exporter` 既要跑在主线程（`Blob`、`document`）也要跑在 Worker（`self.postMessage`）。这避免了「Worker 文件引用 DOM 类型报错」的常见坑。
 
 ### 3.8 语法校验（ESLint flat config）
 
@@ -528,13 +528,13 @@ jobs:
 
 **发布语义**：合并 PR 触发 `changesets/action`：若存在未消费的 changeset，它会**先开一个「Version Packages」PR**（自动改版本号+changelog）；当该 PR 被合并且无新 changeset 时，才真正执行 `pnpm release`（build + publish）。这避免了误发版。
 
-> 📌 **npm Scope 确权**：包名 `@marcus/excel-exporter` 依赖 `@marcus` 组织或用户 `marcus` 存在。Phase 1 预研阶段应运行 `npm view @marcus/excel-exporter` 确认可用性；若需创建组织：`npm org create marcus --defaults`。`publishConfig` 在 4.2 `package.json` 中已配置 `access: "public"`。
+> 📌 **npm Scope 确权**：包名 `@marcusok/excel-exporter` 依赖 `@marcus` 组织或用户 `marcus` 存在。Phase 1 预研阶段应运行 `npm view @marcusok/excel-exporter` 确认可用性；若需创建组织：`npm org create marcus --defaults`。`publishConfig` 在 4.2 `package.json` 中已配置 `access: "public"`。
 
 > 📌 **Playwright CI（已与 ci.yml 对齐）**：Worker 模式的端到端性能验收（主线程阻塞 ≤16ms）只能在真实浏览器中验证（Node 的 `worker_threads` 与 Web Worker 全局不兼容，见 7.2）。采用 playwright 官方推荐的 GitHub Actions 模式：在 `ci.yml` 的 `quality` job 内，先 `pnpm exec playwright install --with-deps chromium` 安装浏览器与系统依赖（ubuntu-latest 原生支持，无需容器镜像），再 `pnpm test:browser` 触发 Turbo 的 `test:browser` 任务（3.6 已注册，`cache: false`）。**不再单建 `playwright.yml` + 容器镜像**——容器镜像 `mcr.microsoft.com/playwright:v1.62.0-focal` 仅在自托管 runner 或需要严格环境锁定时才用，官方 hosted runner 用 `install --with-deps` 更轻量。`@playwright/test` 已在根 `package.json` devDependencies 声明（3.3）。
 
 ---
 
-## 四、`@marcus/excel-exporter` 包设计
+## 四、`@marcusok/excel-exporter` 包设计
 
 ### 4.1 包目录结构
 
@@ -568,7 +568,7 @@ packages/excel-exporter/
 
 ```json
 {
-  "name": "@marcus/excel-exporter",
+  "name": "@marcusok/excel-exporter",
   "version": "0.1.0",
   "type": "module",
   "description": "High-performance Excel export engine built on modern-xlsx (Rust + WASM).",
@@ -615,8 +615,8 @@ packages/excel-exporter/
 
 **设计要点**：
 
-- **ESM-only（已核实）**：本包**不设 `main`/`require`/`.cjs` 产物**。原因：① tsup config（4.3）`format: ['esm']` 只产 ESM；② 核心依赖 `modern-xlsx` 的 `exports['.']` 只有 `import`/`default` 分段、**无 require**（已核实 `npm view modern-xlsx` 的 `exports` 字段），若本包产 CJS，消费方 `require('@marcus/excel-exporter')` 会触发 `require('modern-xlsx')` 抛 Node `ERR_REQUIRE_ESM`。`exports` 每个入口只保留 `types` + `import` 两段；`package.json` 不设 `main`/`module`（ESM-only 包由 `exports.import` 解析，`main` 仅 CJS 兜底用，此处冗余且会误导）。
-- `modern-xlsx` **只**声明在 `peerDependencies`（不进 `dependencies`）：WASM 模块是进程级单例，如果两份 `modern-xlsx` 被解析（库自带一份 + 宿主一份），`initWasm()` 只初始化其中一份，另一份调用 WASM 方法会静默失败。peerDep 模式保证全局只有一份实例。代价：消费方需 `pnpm add @marcus/excel-exporter modern-xlsx` 显式安装。
+- **ESM-only（已核实）**：本包**不设 `main`/`require`/`.cjs` 产物**。原因：① tsup config（4.3）`format: ['esm']` 只产 ESM；② 核心依赖 `modern-xlsx` 的 `exports['.']` 只有 `import`/`default` 分段、**无 require**（已核实 `npm view modern-xlsx` 的 `exports` 字段），若本包产 CJS，消费方 `require('@marcusok/excel-exporter')` 会触发 `require('modern-xlsx')` 抛 Node `ERR_REQUIRE_ESM`。`exports` 每个入口只保留 `types` + `import` 两段；`package.json` 不设 `main`/`module`（ESM-only 包由 `exports.import` 解析，`main` 仅 CJS 兜底用，此处冗余且会误导）。
+- `modern-xlsx` **只**声明在 `peerDependencies`（不进 `dependencies`）：WASM 模块是进程级单例，如果两份 `modern-xlsx` 被解析（库自带一份 + 宿主一份），`initWasm()` 只初始化其中一份，另一份调用 WASM 方法会静默失败。peerDep 模式保证全局只有一份实例。代价：消费方需 `pnpm add @marcusok/excel-exporter modern-xlsx` 显式安装。
 - `xlsx`（SheetJS）作为 `optional` peerDependency：仅降级路径动态 `import('xlsx')`，不安装不影响主流程。`optionalDependencies` 会被 `pnpm install` 默认拉取（浪费体积），改走 peerDep + `peerDependenciesMeta.optional=true` 后消费方按需安装：`pnpm add xlsx`（仅需要降级保底时）。
 - `exports` 暴露三个入口：主入口、样式预设（按需 tree-shake）、`./worker-utils`（Worker 封装，入口名刻意避开 `./worker`，以免与 `modern-xlsx.worker.js` 这个 WASM Worker 脚本混淆）。**入口名、4.3 的 tsup entry、消费方 import 三处必须一致，全部用 `worker-utils`**（早期版本 `package.json` 写成 `./worker`，与 tsup entry 不一致，已修正）。
 - `sideEffects: false`：让消费方的 bundler 能安全 tree-shake。
@@ -670,7 +670,7 @@ export default defineConfig([
 
 > 📌 **为何 Worker 入口必须自包含（已核实）**：浏览器中 `new Worker(url, {type:'module'})` 加载的 module worker 走独立的 module script 解析，**不共享主文档的 import map**（WHATWG HTML spec：import map 仅注册在 Document 上下文，WorkerGlobalScope 无对应注册机制；Chrome/Firefox/Safari 实现一致）。因此 worker 脚本里的 `import ... from 'modern-xlsx'` 这种 bare specifier 会直接抛 `TypeError: Failed to resolve module specifier`，**运行时必崩**。**旁证**：modern-xlsx 官方的 `modern-xlsx.worker.js`（wasm-bindgen 输出，已核实源码）本身就是自包含的，不 import 任何 npm 包——这恰恰是 worker 不能依赖 bare import 的实证。本方案因此把 modern-xlsx 打包进 `export.worker.js`（约 +133KB 压缩前），换取 worker 独立可加载。代价：worker 体积增大，但仅按需加载（worker 模式才触发），且浏览器只下载一次。
 >
-> 📌 **为何主入口只产 ESM**：modern-xlsx 的 `exports['.']` 只有 `import`/`default`，**无 require 分段**（已核实 npm tarball `package.json`）。若本库产 CJS，消费方 `require('@marcus/excel-exporter')` 会触发 `require('modern-xlsx')` 抛 Node `ERR_REQUIRE_ESM`。本库定位为浏览器导出引擎，消费方均为现代 ESM 工程（Vite/Rollup/webpack5），ESM-only 最干净，也与 modern-xlsx 的 `"type":"module"` 对齐。`package.json` 因此不设 `main`/`require`（见 4.2）。
+> 📌 **为何主入口只产 ESM**：modern-xlsx 的 `exports['.']` 只有 `import`/`default`，**无 require 分段**（已核实 npm tarball `package.json`）。若本库产 CJS，消费方 `require('@marcusok/excel-exporter')` 会触发 `require('modern-xlsx')` 抛 Node `ERR_REQUIRE_ESM`。本库定位为浏览器导出引擎，消费方均为现代 ESM 工程（Vite/Rollup/webpack5），ESM-only 最干净，也与 modern-xlsx 的 `"type":"module"` 对齐。`package.json` 因此不设 `main`/`require`（见 4.2）。
 >
 > 📌 **`clean` 字段**：数组 config 中只有第一个设 `clean:true`，第二个设 `clean:false`。tsup 按数组顺序串行执行——第一个清空 `dist` 后产出主入口，第二个追加 worker 产物不清空。若两个都设 `clean:true`，第二个会清掉第一个的产物。
 >
@@ -1467,7 +1467,7 @@ function pickMode(options: ExportOptions, totalRows: number): PickedMode {
  *
  * @example
  * ```ts
- * import { exportExcel, StylePresets } from '@marcus/excel-exporter';
+ * import { exportExcel, StylePresets } from '@marcusok/excel-exporter';
  *
  * await exportExcel({
  *   filename: 'sales-report',
@@ -1744,7 +1744,7 @@ WASM（1.9MB）不影响首屏：仅在首次导出时加载。配合 `requestId
 
 ```ts
 // 在 App 入口（如 main.ts）
-import { configureWasm, getWasmLoader } from "@marcus/excel-exporter";
+import { configureWasm, getWasmLoader } from "@marcusok/excel-exporter";
 
 // 生产环境显式指定自托管 URL（强烈建议，避免 CDN 抖动）
 configureWasm({
@@ -1826,14 +1826,14 @@ WASM 加载失败 ─┘
 ### 6.1 安装
 
 ```bash
-pnpm add @marcus/excel-exporter
+pnpm add @marcusok/excel-exporter
 # modern-xlsx 是 peerDependency（4.2 设计），消费方必须显式安装
 pnpm add modern-xlsx
 # 仅在需要 SheetJS 降级保底时安装（optional peerDep，不装也不影响主路径）
 # pnpm add xlsx
 #
 # workspace 内部引用：
-# "dependencies": { "@marcus/excel-exporter": "workspace:*", "modern-xlsx": "^1.2.0" }
+# "dependencies": { "@marcusok/excel-exporter": "workspace:*", "modern-xlsx": "^1.2.0" }
 ```
 
 ### 6.2 Vite 项目接入（WASM 资源处理）
@@ -1841,7 +1841,7 @@ pnpm add modern-xlsx
 本库需要两份静态资源在消费方站点上可访问：
 
 1. **`modern-xlsx.wasm`**（来自 `modern-xlsx` 包，WASM 核心二进制）；
-2. **`export.worker.mjs`**（来自 `@marcus/excel-exporter` 包，自建薄 Worker 脚本，见 4.9）。
+2. **`export.worker.mjs`**（来自 `@marcusok/excel-exporter` 包，自建薄 Worker 脚本，见 4.9）。
 
 推荐「构建时显式拷贝到 `public/assets/`」。**不要硬编码 `node_modules/...` 路径**——pnpm 把依赖装在嵌套 `.pnpm/...` 下、顶层 `node_modules/modern-xlsx` 只是符号链接，直接拼路径在某些工具链（`--frozen-lockfile`、monorepo）下会指向错误位置。改用 `createRequire` 从包的 `exports` 字段反推真实磁盘路径：
 
@@ -1873,7 +1873,7 @@ export default defineConfig({
           "public/assets/modern-xlsx.wasm",
         );
         // 2. 本库的 Worker 脚本
-        const exporterDist = resolveDistDir("@marcus/excel-exporter");
+        const exporterDist = resolveDistDir("@marcusok/excel-exporter");
         const workerSrc = `${exporterDist}/export.worker.mjs`;
         if (!statSync(workerSrc, { throwIfNoEntry: false })) {
           throw new Error(
@@ -1889,7 +1889,7 @@ export default defineConfig({
 
 ```ts
 // main.ts
-import { configureWasm } from "@marcus/excel-exporter";
+import { configureWasm } from "@marcusok/excel-exporter";
 // 同时提供 wasmUrl（WASM 核心）与 workerUrl（自建薄 Worker 脚本），见 4.5/4.9
 configureWasm({
   wasmUrl: "/assets/modern-xlsx.wasm",
@@ -1906,7 +1906,7 @@ configureWasm({
 > ⚠️ **v2.0 提示**：8 万行会走 worker + stream（≥5 万行阈值，见 4.10/5.3）。stream 路径 v1 不支持 StyleBuilder 样式，故本例中的 style 和 ormat 在 8 万行场景下实际不生效。若需带样式，请将数据量控制在 ≤5 万行（走 Workbook）。以下示例改用 FormatSpec（worker 兼容）而非函数形式。
 
 ` s
-import { exportExcel, StylePresets, configureWasm } from '@marcus/excel-exporter';
+import { exportExcel, StylePresets, configureWasm } from '@marcusok/excel-exporter';
 
 configureWasm({ wasmUrl: '/assets/modern-xlsx.wasm', workerUrl: '/assets/export.worker.mjs' });
 
@@ -2450,4 +2450,4 @@ Node 24+ 升级：modern-xlsx@1.2.0 engines 要求 node>=24.0.0（已核实 `npm
 
 ### 附录 G · writeBlob 同步调用警告
 
-modern-xlsx 的 `writeBlob(wb)` 同步执行 `wb.toJSON()` + WASM 序列化，**全程同步阻塞调用线程**。v1.9 实测：10 万行场景主线程开销独立进程首次 **17.5 秒**（塌方，见附录 A）、热状态 628ms——无论哪个都远超 ≤16ms 预算。`@marcus/excel-exporter` 不暴露 `writeBlob`，也不在主线程调 `wb.toBuffer()`：① ≤5 万行走 Workbook + Worker；② ≥5 万行走 StreamingXlsxWriter（Worker 内，`finish()` 实测 ~90ms，v2.0 修正）。`writeBlob` / 主线程 `toBuffer` 仅存在于 Node/SSR 的 main 模式（<500 行）。
+modern-xlsx 的 `writeBlob(wb)` 同步执行 `wb.toJSON()` + WASM 序列化，**全程同步阻塞调用线程**。v1.9 实测：10 万行场景主线程开销独立进程首次 **17.5 秒**（塌方，见附录 A）、热状态 628ms——无论哪个都远超 ≤16ms 预算。`@marcusok/excel-exporter` 不暴露 `writeBlob`，也不在主线程调 `wb.toBuffer()`：① ≤5 万行走 Workbook + Worker；② ≥5 万行走 StreamingXlsxWriter（Worker 内，`finish()` 实测 ~90ms，v2.0 修正）。`writeBlob` / 主线程 `toBuffer` 仅存在于 Node/SSR 的 main 模式（<500 行）。

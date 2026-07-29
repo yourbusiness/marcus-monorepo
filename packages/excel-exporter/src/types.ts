@@ -1,11 +1,11 @@
 /**
- * Type definitions for @marcus/excel-exporter.
+ * Type definitions for @marcusok/excel-exporter.
  *
  * Colors use 6-digit RGB hex (e.g. `'FF0000'`), matching modern-xlsx's
  * FontData.color / FillData.fgColor / BorderSideData.color (verified from
  * dist/validate-chart-D1O7LOfU.d.mts @ modern-xlsx 1.2.0).
  */
-import type { BorderStyle } from 'modern-xlsx';
+import type { BorderStyle } from "modern-xlsx";
 export type { BorderStyle };
 
 /** Business-friendly cell style config; mapped to StyleBuilder in style-utils.ts. */
@@ -18,13 +18,13 @@ export interface CellStyle {
     name?: string; // font name, e.g. 'Arial'
   };
   fill?: {
-    pattern?: 'solid' | 'none';
+    pattern?: "solid" | "none";
     fgColor?: string; // 6-digit RGB hex
     bgColor?: string;
   };
   alignment?: {
-    horizontal?: 'left' | 'center' | 'right';
-    vertical?: 'top' | 'center' | 'bottom';
+    horizontal?: "left" | "center" | "right";
+    vertical?: "top" | "center" | "bottom";
     wrapText?: boolean;
     textRotation?: number; // 0-180
   };
@@ -43,11 +43,11 @@ export interface CellStyle {
  * FormatSpec only. Function form works in `main` mode (browser <500 rows / Node).
  */
 export type FormatSpec =
-  | { type: 'enum'; map: Record<string, string>; fallback?: string }
-  | { type: 'date'; pattern?: string } // default 'yyyy-MM-dd'
-  | { type: 'datetime'; pattern?: string } // default 'yyyy-MM-dd HH:mm'
-  | { type: 'number'; decimals?: number; thousands?: boolean }
-  | { type: 'padding'; fill: string; length: number; align?: 'left' | 'right' };
+  | { type: "enum"; map: Record<string, string>; fallback?: string }
+  | { type: "date"; pattern?: string } // default 'yyyy-MM-dd'
+  | { type: "datetime"; pattern?: string } // default 'yyyy-MM-dd HH:mm'
+  | { type: "number"; decimals?: number; thousands?: boolean }
+  | { type: "padding"; fill: string; length: number; align?: "left" | "right" };
 
 /** Column configuration. */
 export interface ColumnConfig {
@@ -58,7 +58,12 @@ export interface ColumnConfig {
   /** Style applied to all data cells in this column (not the header). */
   style?: CellStyle;
   /** Value formatter: FormatSpec (worker-compatible) or function (main/Node only). */
-  format?: FormatSpec | ((value: unknown, row: Record<string, unknown>) => string | number | boolean);
+  format?:
+    | FormatSpec
+    | ((
+        value: unknown,
+        row: Record<string, unknown>,
+      ) => string | number | boolean);
 }
 
 /** Merge range: relative to the data area, row/col are 0-based (row 0 = first data row). */
@@ -83,7 +88,7 @@ export interface SheetConfig {
 }
 
 /** Export mode. */
-export type ExportMode = 'auto' | 'main' | 'worker' | 'stream';
+export type ExportMode = "auto" | "main" | "worker" | "stream";
 
 /** Export options. */
 export interface ExportOptions {
@@ -102,7 +107,7 @@ export interface ExportResult {
   success: boolean;
   blob?: Blob;
   /** Engine actually used. */
-  engine?: 'modern-xlsx' | 'sheetjs';
+  engine?: "modern-xlsx" | "sheetjs";
   /** Mode actually used. */
   mode?: ExportMode;
   duration?: number; // ms

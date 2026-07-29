@@ -56,7 +56,7 @@ function pickMode(options: ExportOptions, totalRows: number): PickedMode {
  *
  * @example
  * ```ts
- * import { exportExcel, StylePresets } from '@marcus/excel-exporter';
+ * import { exportExcel, StylePresets } from '@marcusok/excel-exporter';
  *
  * await exportExcel({
  *   filename: 'sales-report',

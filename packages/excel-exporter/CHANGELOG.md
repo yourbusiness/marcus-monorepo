@@ -1,4 +1,4 @@
-# @marcus/excel-exporter
+# @marcusok/excel-exporter
 
 ## 0.1.1
 

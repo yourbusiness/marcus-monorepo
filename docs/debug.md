@@ -11,7 +11,7 @@
 | 文档创建    | 2026-07-29 15:39 (GMT+08:00)                                                         |
 | 涉及提交    | `cefad0e` fix(excel-exporter): tighten exports and declare xlsx as optional peer dep |
 | 远程仓库    | `git@github.com:yourbusiness/marcus-monorepo.git`                                    |
-| 包名 / 版本 | `@marcus/excel-exporter` @ `0.1.0`                                                   |
+| 包名 / 版本 | `@marcusok/excel-exporter` @ `0.1.0`                                                 |
 | 根工程版本  | `marcus-monorepo` @ `0.0.0`                                                          |
 | Node        | 22.22.2（CI 固定 22，来源 `.nvmrc`）                                                 |
 | pnpm        | 9.12.0（来源 `package.json` `packageManager`）                                       |
@@ -73,7 +73,7 @@ CI runner 一抖，100k 那条冲过 3000ms 极常见；「format 差值 < 45ms�
 
 ### 2.2 确认方式
 
-去 GitHub 那次失败的 CI 运行，看是否挂在 `@marcus/excel-exporter:test` 步骤，日志里应该是 `expected ... to be less than ...`。
+去 GitHub 那次失败的 CI 运行，看是否挂在 `@marcusok/excel-exporter:test` 步骤，日志里应该是 `expected ... to be less than ...`。
 
 ### 2.3 修复方案（三选一，推荐 A）
 

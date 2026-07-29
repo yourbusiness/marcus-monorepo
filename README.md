@@ -1,12 +1,12 @@
-# marcus-monorepo
+﻿# marcus-monorepo
 
 High-performance Excel export engine built on [modern-xlsx](https://github.com/ABCrimson/modern-xlsx) (Rust + WASM). pnpm + Turborepo monorepo.
 
 ## Packages
 
-| Package                                               | Description                                                |
-| ----------------------------------------------------- | ---------------------------------------------------------- |
-| [`@marcus/excel-exporter`](./packages/excel-exporter) | Core Excel export library (WASM-backed, styled, streaming) |
+| Package                                                 | Description                                                |
+| ------------------------------------------------------- | ---------------------------------------------------------- |
+| [`@marcusok/excel-exporter`](./packages/excel-exporter) | Core Excel export library (WASM-backed, styled, streaming) |
 
 ## Quick start
 

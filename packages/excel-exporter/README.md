@@ -1,28 +1,28 @@
-# @marcus/excel-exporter
+﻿# @marcusok/excel-exporter
 
-High-performance Excel export engine built on [modern-xlsx](https://github.com/ABCrimson/modern-xlsx) (Rust + WASM). Free cell styles, number formats, data validation, freeze panes, and streaming export for very large datasets — features SheetJS charges for.
+High-performance Excel export engine built on [modern-xlsx](https://github.com/ABCrimson/modern-xlsx) (Rust + WASM). Free cell styles, number formats, data validation, freeze panes, and streaming export for very large datasets 鈥?features SheetJS charges for.
 
 ## Why
 
-SheetJS Community Edition cannot **write** styles (paid Pro only) and chokes on large exports. `modern-xlsx` is MIT-licensed, WASM-accelerated, and writes full styling for free. This package wraps it with a friendly, declarative API and automatic routing between a fast in-memory path (≤50k rows, full styles) and a constant-memory streaming path (≥50k rows).
+SheetJS Community Edition cannot **write** styles (paid Pro only) and chokes on large exports. `modern-xlsx` is MIT-licensed, WASM-accelerated, and writes full styling for free. This package wraps it with a friendly, declarative API and automatic routing between a fast in-memory path (鈮?0k rows, full styles) and a constant-memory streaming path (鈮?0k rows).
 
 ## Performance (verified, 4 cols, independent-process first run)
 
-| Rows | Path     | End-to-end   | Notes                                            |
-| ---- | -------- | ------------ | ------------------------------------------------ |
-| 10k  | Workbook | ~120 ms      | sheetAddAoa ~22ms + toBuffer ~100ms              |
-| 50k  | Workbook | ~580–830 ms  | styles + freeze + autofilter                     |
-| 100k | Stream   | ~1.6–1.8 s   | writeRow ~1.5s + finish ~100ms                   |
-| 100k | Workbook | **~21 s** ⚠️ | toBuffer cliff — why the stream threshold exists |
+| Rows | Path     | End-to-end       | Notes                                             |
+| ---- | -------- | ---------------- | ------------------------------------------------- |
+| 10k  | Workbook | ~120 ms          | sheetAddAoa ~22ms + toBuffer ~100ms               |
+| 50k  | Workbook | ~580鈥?30 ms     | styles + freeze + autofilter                      |
+| 100k | Stream   | ~1.6鈥?.8 s      | writeRow ~1.5s + finish ~100ms                    |
+| 100k | Workbook | **~21 s** 鈿狅笍 | toBuffer cliff 鈥?why the stream threshold exists |
 
-> `Workbook.toBuffer()` has a severe performance cliff beyond ~55k rows (verified: 100k rows takes ~21s on a cold process, vs ~600ms hot). The 50k stream threshold is deliberately conservative. Within a single long-lived process the second 100k run is ~600ms (hot cache) — but real browser exports are first-runs, so design for the cold number.
+> `Workbook.toBuffer()` has a severe performance cliff beyond ~55k rows (verified: 100k rows takes ~21s on a cold process, vs ~600ms hot). The 50k stream threshold is deliberately conservative. Within a single long-lived process the second 100k run is ~600ms (hot cache) 鈥?but real browser exports are first-runs, so design for the cold number.
 
 Main-thread blocking budget: worker mode does one structured-clone `postMessage` (~9ms/10k, ~46ms/50k, ~94ms/100k), all WASM work runs off-thread.
 
 ## Install
 
 ```bash
-pnpm add @marcus/excel-exporter modern-xlsx
+pnpm add @marcusok/excel-exporter modern-xlsx
 ```
 
 `modern-xlsx` is a peerDependency (must be installed explicitly so the WASM singleton is process-global). Optionally add `xlsx` for the SheetJS fallback path.
@@ -51,10 +51,10 @@ export default defineConfig({
           `${resolveDistDir("modern-xlsx")}/modern-xlsx.wasm`,
           "public/assets/modern-xlsx.wasm",
         );
-        const workerSrc = `${resolveDistDir("@marcus/excel-exporter")}/export.worker.js`;
+        const workerSrc = `${resolveDistDir("@marcusok/excel-exporter")}/export.worker.js`;
         if (!statSync(workerSrc, { throwIfNoEntry: false })) {
           throw new Error(
-            `export.worker.js not found — run pnpm build in the package first. Looked at: ${workerSrc}`,
+            `export.worker.js not found 鈥?run pnpm build in the package first. Looked at: ${workerSrc}`,
           );
         }
         copyFileSync(workerSrc, "public/assets/export.worker.js");
@@ -65,8 +65,8 @@ export default defineConfig({
 ```
 
 ```ts
-// main.ts — point the loader at the copied assets
-import { configureWasm } from "@marcus/excel-exporter";
+// main.ts 鈥?point the loader at the copied assets
+import { configureWasm } from "@marcusok/excel-exporter";
 
 configureWasm({
   wasmUrl: "/assets/modern-xlsx.wasm",
@@ -77,7 +77,7 @@ configureWasm({
 ## Usage
 
 ```ts
-import { exportExcel, StylePresets } from "@marcus/excel-exporter";
+import { exportExcel, StylePresets } from "@marcusok/excel-exporter";
 
 await exportExcel({
   filename: "sales-report",
@@ -112,7 +112,7 @@ await exportExcel({
           },
         },
       ],
-      data: rows, // auto-routing: <500 main, 500–49,999 worker+workbook, ≥50,000 worker+stream
+      data: rows, // auto-routing: <500 main, 500鈥?9,999 worker+workbook, 鈮?0,000 worker+stream
     },
   ],
 });
@@ -120,15 +120,15 @@ await exportExcel({
 
 ### Format
 
-`ColumnConfig.format` accepts either a `FormatSpec` (worker-safe) or a function (main/Node only — stripped in worker mode with a warning). Built-in spec types: `enum`, `date`, `datetime`, `number` (decimals + thousands), `padding` (zero-pad order IDs, etc.).
+`ColumnConfig.format` accepts either a `FormatSpec` (worker-safe) or a function (main/Node only 鈥?stripped in worker mode with a warning). Built-in spec types: `enum`, `date`, `datetime`, `number` (decimals + thousands), `padding` (zero-pad order IDs, etc.).
 
 ### Mode routing (`auto`)
 
-| Rows       | Browser                                  | Node   |
-| ---------- | ---------------------------------------- | ------ |
-| < 500      | main                                     | main   |
-| 500–49,999 | worker + workbook (full styles)          | main   |
-| ≥ 50,000   | worker + stream (no StyleBuilder styles) | stream |
+| Rows        | Browser                                  | Node   |
+| ----------- | ---------------------------------------- | ------ |
+| < 500       | main                                     | main   |
+| 500鈥?9,999 | worker + workbook (full styles)          | main   |
+| 鈮?50,000   | worker + stream (no StyleBuilder styles) | stream |
 
 Force a mode with `mode: 'main' | 'worker' | 'stream'`.
 
@@ -138,16 +138,16 @@ If WASM is unsupported or fails to load after retries, the export degrades to Sh
 
 ## API
 
-- `exportExcel(options): Promise<ExportResult>` — main entry.
-- `configureWasm(opts)` — set `wasmUrl` / `workerUrl` / `timeoutMs` / `maxRetries`.
-- `WorkbookBuilder` — direct batch-write builder (≤50k rows, full styles).
-- `exportAsStream(sheets)` — direct streaming export (≥50k rows).
-- `StylePresets` — `header`, `currency`, `percent`, `date`, `datetime`, `dataRow`, `danger`.
-- `exportInWorker` / `terminateWorker` (`@marcus/excel-exporter/worker-utils`) — manual worker lifecycle control.
+- `exportExcel(options): Promise<ExportResult>` 鈥?main entry.
+- `configureWasm(opts)` 鈥?set `wasmUrl` / `workerUrl` / `timeoutMs` / `maxRetries`.
+- `WorkbookBuilder` 鈥?direct batch-write builder (鈮?0k rows, full styles).
+- `exportAsStream(sheets)` 鈥?direct streaming export (鈮?0k rows).
+- `StylePresets` 鈥?`header`, `currency`, `percent`, `date`, `datetime`, `dataRow`, `danger`.
+- `exportInWorker` / `terminateWorker` (`@marcusok/excel-exporter/worker-utils`) 鈥?manual worker lifecycle control.
 
 ## Node usage
 
-Node has no Web Worker, so worker mode is unavailable — `auto` runs `main` (≤50k) or `stream` (≥50k) on the calling thread. Use `initWasmSync` for test setup (Node's `fetch` rejects `file://`):
+Node has no Web Worker, so worker mode is unavailable 鈥?`auto` runs `main` (鈮?0k) or `stream` (鈮?0k) on the calling thread. Use `initWasmSync` for test setup (Node's `fetch` rejects `file://`):
 
 ```ts
 import { readFileSync } from "node:fs";

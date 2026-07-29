@@ -1,5 +1,5 @@
 {
-  "name": "@marcus/excel-exporter",
+  "name": "@marcusok/excel-exporter",
   "version": "0.1.1",
   "type": "module",
   "description": "High-performance Excel export engine built on modern-xlsx (Rust + WASM).",
