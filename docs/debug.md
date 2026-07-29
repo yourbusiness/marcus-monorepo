@@ -1,23 +1,35 @@
 # CI / Release 流水线排障与修复方案
 
-> 本文档记录 `cefad0e`（fix(excel-exporter): tighten exports and declare xlsx as optional peer dep）推送到 main 后，CI 与 Release 两条 workflow 同时失败的诊断结论与详细修复步骤。
+> 本文完整记录 `cefad0e` 推送到 main 后，CI 与 Release 两条 workflow 连续失败的排障全过程：从最初的诊断推断，到拿到真实日志后的根因纠正，再到最终的四类改动与 push。供后续同类问题对照。
 
 ---
 
 ## 版本与时间记录
 
-| 项目        | 值                                                                                   |
-| ----------- | ------------------------------------------------------------------------------------ |
-| 文档创建    | 2026-07-29 15:39 (GMT+08:00)                                                         |
-| 涉及提交    | `cefad0e` fix(excel-exporter): tighten exports and declare xlsx as optional peer dep |
-| 远程仓库    | `git@github.com:yourbusiness/marcus-monorepo.git`                                    |
-| 包名 / 版本 | `@marcusok/excel-exporter` @ `0.1.0`                                                 |
-| 根工程版本  | `marcus-monorepo` @ `0.0.0`                                                          |
-| Node        | 22.22.2（CI 固定 22，来源 `.nvmrc`）                                                 |
-| pnpm        | 9.12.0（来源 `package.json` `packageManager`）                                       |
-| 构建编排    | Turborepo 2.10.7                                                                     |
-| 发版工具    | Changesets 2.31.1                                                                    |
-| 诊断结论    | 代码与锁文件无问题；失败发生在 GitHub Actions 运行环境与仓库/npm 配置                |
+| 项目       | 值                                                                        |
+| ---------- | ------------------------------------------------------------------------- |
+| 文档创建   | 2026-07-29 15:39 (GMT+08:00)                                              |
+| 文档更新   | 2026-07-29 16:40 (GMT+08:00)（补全完整排障过程与最终改动）                |
+| 远程仓库   | `git@github.com:yourbusiness/marcus-monorepo.git`                         |
+| 包名（原） | `@marcus/excel-exporter`                                                  |
+| 包名（现） | `@marcusok/excel-exporter` @ `0.1.1`                                      |
+| 根工程版本 | `marcus-monorepo` @ `0.0.0`                                               |
+| Node       | 22.22.2（CI 固定 22，来源 `.nvmrc`）                                      |
+| pnpm       | 9.12.0（来源 `package.json` `packageManager`）                            |
+| 构建编排   | Turborepo 2.10.7                                                          |
+| 发版工具   | Changesets 2.31.1                                                         |
+| npm 账号   | 用户名 `marcus_w`，新建 org `marcusok` 持有 `@marcusok` scope             |
+| 最终结论   | 两条 workflow 的失败根因都是性能测试 flake；publish 层另有 scope 归属问题 |
+
+**关键提交链**：
+
+```
+21c4f2a fix(excel-exporter): rename scope to @marcusok and skip perf tests on CI  ← 最终修复
+5907517 fix(ci): skip perf tests on CI and drop test changeset
+cc879b9 Merge pull request #1 ...（机器人 Version PR，远程已有）
+8cb658a chore: release packages（机器人 bump 到 0.1.1）
+cefad0e fix(excel-exporter): tighten exports and declare xlsx as optional peer dep  ← 失败起点
+```
 
 ---
 
@@ -49,51 +61,93 @@ pnpm exec turbo run typecheck test build --force
 
 锁文件里 Linux 平台的 optional 依赖（esbuild 各平台包、@esbuild/linux-* 等）都有记录，不存在「Windows 生成锁文件、Linux 装不上」的问题。
 
-结论：失败几乎可以锁定在 CI 运行环境特有的环节，以及你还没完成的 GitHub/npm 配置上。
+结论：失败几乎可以锁定在 CI 运行环境特有的环节，以及 GitHub/npm 配置上。
 
 ---
 
-## 2. CI 失败：性能测试 flake（重点）
+## 2. 第一阶段诊断：基于本地全绿的推断
 
-### 2.1 原因
+> 这一节的推断后来被真实日志部分纠正（见第 3 节）。保留原推断是为了说明「为什么一开始会往权限问题上猜」。
 
-[performance.test.ts](/packages/excel-exporter/src/__tests__/performance.test.ts) 里用**墙钟时间（performance.now 差值）做硬性断言**。GitHub Actions 的 ubuntu shared runner 对 CPU/WASM 任务通常比开发机慢 1.5~2x，且抖动大，必然 flake。
+### 2.1 当时对 CI 失败的推断
+
+[performance.test.ts](/packages/excel-exporter/src/__tests__/performance.test.ts) 用**墙钟时间（performance.now 差值）做硬性断言**。GitHub Actions 的 ubuntu shared runner 对 CPU/WASM 任务通常比开发机慢 1.5~2x，且抖动大，必然 flake。
 
 本地实测对照（`PERF_TIGHT` 未设，默认 1.5x slack）：
 
-| 用例                      | 本地实测   | 阈值（1.5x 后） |
-| ------------------------- | ---------- | --------------- |
-| 50k 行 main               | 701ms      | < 1500ms        |
-| 100k 行 stream            | **1864ms** | < 3000ms        |
-| format 开销差值（10k 行） | 很小       | < **45ms**      |
+| 用例                      | 本地实测 | 阈值（1.5x 后） |
+| ------------------------- | -------- | --------------- |
+| 50k 行 main               | 701ms    | < 1500ms        |
+| 100k 行 stream            | 1864ms   | < 3000ms        |
+| format 开销差值（10k 行） | 很小     | < 45ms          |
 
-CI runner 一抖，100k 那条冲过 3000ms 极常见；「format 差值 < 45ms」更脆，光噪声就能超。
+明显征兆：本次提交把 slack 从 `1.2x` 提到了 `1.5x`（见 `git show cefad0e`），说明它一直在 CI 上 flake，一直在放宽阈值——治标不治本。
 
-明显征兆：本次提交把 slack 从 `1.2x` 提到了 `1.5x`（见 `git show cefad0e`），说明它一直在 CI 上 flake，一直在放宽阈值——**治标不治本**。
+### 2.2 当时对 Release 失败的推断（后来被纠正）
 
-### 2.2 确认方式
+当时猜测 Release 卡在「创建 Version PR」那一步，报 `HttpError: Resource not accessible by integration`，原因是仓库 Settings 的 Workflow permissions 没开「Allow GitHub Actions to create and approve pull requests」。
 
-去 GitHub 那次失败的 CI 运行，看是否挂在 `@marcusok/excel-exporter:test` 步骤，日志里应该是 `expected ... to be less than ...`。
+**这个猜测后来被证明是错的**，原因见第 3 节。
 
-### 2.3 修复方案（三选一，推荐 A）
+---
 
-#### 方案 A（推荐）：CI 跳过 perf，本地保留
+## 3. 第二阶段诊断：拿到真实日志后的根因纠正
 
-最干净。给 perf 测试加环境开关，CI 上默认不跑，本地照常当回归看门狗。
+用户提供了一段 Release workflow 的真实失败日志。日志的关键内容：
 
-**第 1 步**：改 [performance.test.ts](/packages/excel-exporter/src/__tests__/performance.test.ts)
+```
+src/__tests__/performance.test.ts (4 tests | 3 failed) 7446ms
+  10k rows x 4 cols (main) < 200ms   →  1296ms  expected to be less than 300
+  50k rows x 4 cols (main) < 1000ms  →  2008ms  expected to be less than 1500
+  100k rows x 4 cols (stream) < 2000ms → 3971ms  expected to be less than 3000
 
-在 import 之后、`SLACK` 之前加：
-
-```ts
-// Perf 基线只在本地当回归看门狗；CI shared runner 抖动大，跑它只会 flake。
-// 本地默认跑；设 RUN_PERF=0 跳过（CI 里用）。
-const RUN_PERF = process.env.RUN_PERF !== "0";
+Failed: @marcus/excel-exporter#test
+Error: Publish command exited with code 1
 ```
 
-把整个 `describe(...)` 用 `describe.runIf` 包一层：
+### 3.1 日志说了什么
+
+CI 实测数据触目惊心，shared runner 比本地慢了将近 **3 倍**：
+
+| 用例           | 本地实测 | CI 实测    | 阈值（1.5x 后） |
+| -------------- | -------- | ---------- | --------------- |
+| 10k 行 main    | —        | 1282ms     | < 300ms         |
+| 50k 行 main    | 701ms    | **2008ms** | < 1500ms        |
+| 100k 行 stream | 1864ms   | **3971ms** | < 3000ms        |
+
+最后那行 `Publish command exited with code 1` 是 turbo test 失败后 `&&` 短路，`changeset publish` 根本没机会执行。
+
+### 3.2 对 Release 失败原因的纠正（重要）
+
+**两个 workflow 失败的根因是同一个：perf 测试在 CI runner 上 flake。不是权限问题，不是 npm 问题。**
+
+之前猜 Release 卡在「建 Version PR」那一步（`Resource not accessible by integration`），**这个猜测是错的**。证据在日志里：带 `Publish command exited with code 1`，说明 Release 已经走到了 publish 分支（`.changeset/` 为空），也就是 Version PR 早就建好并合并了（`cc879b9`）。所以 GitHub 权限其实是通的，建 PR 没卡。
+
+真正的卡点是：Version PR 合并触发第二次 Release，走 `pnpm release` 质量门禁，perf 测试炸了，`changeset publish` 被挡在 `&&` 后面永远跑不到。
+
+### 3.3 这也解释了 npm 上为何查不到包
+
+`npm view @marcus/excel-exporter` 返回 404——**包从来没被成功 publish 过**，不是 token 或 scope 的问题，是质量门禁先把它拦了。
+
+---
+
+## 4. CI 失败修复：性能测试开关
+
+### 4.1 方案选择
+
+三个方案，选了最干净的方案 A：CI 跳过 perf，本地保留。
+
+- 方案 A（采用）：环境开关，CI 跳过、本地照跑。
+- 方案 B：改成相对基线断言，改动大维护重。
+- 方案 C：极端放宽阈值，即现在的状态（1.2x → 1.5x），治标不治本。
+
+### 4.2 具体改动
+
+**第 1 步**：[performance.test.ts](/packages/excel-exporter/src/__tests__/performance.test.ts) 加 `RUN_PERF` 开关，`describe` 包一层 `describe.runIf`：
 
 ```ts
+const RUN_PERF = process.env.RUN_PERF !== "0";
+
 describe.runIf(RUN_PERF)(
   "performance (Node WASM-core regression baseline)",
   () => {
@@ -102,9 +156,7 @@ describe.runIf(RUN_PERF)(
 );
 ```
 
-**第 2 步**：改 [ci.yml](/.github/workflows/ci.yml)
-
-把 `pnpm test` 这一步加环境变量：
+**第 2 步**：[ci.yml](/.github/workflows/ci.yml) 的 `pnpm test` 加 env：
 
 ```yaml
 - run: pnpm test
@@ -112,9 +164,7 @@ describe.runIf(RUN_PERF)(
     RUN_PERF: "0"
 ```
 
-**第 3 步**：改 [release.yml](/.github/workflows/release.yml)
-
-Release 走的 `pnpm release` 里有 `turbo run ... test`，要同样跳过。给 release job 的 env 加一行（和现有的 `HUSKY: "0"` 并列），turbo 子进程能继承：
+**第 3 步**：[release.yml](/.github/workflows/release.yml) 的 job env 加一行（让 `pnpm release` 里的 turbo test 也跳过 perf）：
 
 ```yaml
 env:
@@ -122,127 +172,271 @@ env:
   RUN_PERF: "0"
 ```
 
-效果：perf 测试在你本地照常跑，CI 上彻底不跑，flake 根除。将来上自托管 runner 再把开关打开。
+### 4.3 本地验证
 
-#### 方案 B：保留 perf 但改成相对基线
-
-不断绝对时间，改用「本次 vs 热身 10 次的中位数的 N 倍」之类相对断言。改动大、维护成本高，除非有明确的回归门禁需求，否则不值当。测试文件末尾注释其实已点明：toBuffer 的冷热差距太大，无法在单进程 vitest 里稳定测——同一个问题的延伸。
-
-#### 方案 C：极端放宽阈值
-
-只把 `expect(dt).toBeLessThan(...)` 的数字放大到 CI 永远碰不到。这就是现在一直在做的（1.2x → 1.5x），治标不治本，哪天 runner 又慢了继续 flake。**不推荐**。
+- `RUN_PERF` 不设（本地）：27 个测试全过，perf 照常当回归看门狗。
+- `RUN_PERF=0`（模拟 CI）：perf 4 个 skip，其余 23 个全过。开关行为符合预期。
 
 ---
 
-## 3. Release 失败：GitHub 仓库权限没开（最优先）
+## 5. 顺带处理：测试 changeset 残留
 
-### 3.1 原因
+### 5.1 问题
 
-本次 push 带了**两个 pending changeset**（`bumpy-tables-grin.md` 和 `fix-exports-and-peer-deps.md`）。按 `changesets/action` 逻辑，这种情况它**不会发布**，只执行 `pnpm version-packages` 然后创建一个标题「chore: release packages」的 Version PR。
+`.changeset/bumpy-tables-grin.md`（原名 `funny-pugs-leave.md`）是旧版文档验证步骤留下的测试残留，内容是「修改了一些配置文件」。它和真正的 changeset 一起会把版本多 bump 一次、changelog 混进模糊描述。
 
-失败极可能发生在「创建 PR」这一步，最常见报错（文档 6.5/6.6 节自己写过）：
+### 5.2 处理
 
-```
-HttpError: Resource not accessible by integration
-```
+`git rm .changeset/bumpy-tables-grin.md`，留 [fix-exports-and-peer-deps.md](/.changeset/fix-exports-and-peer-deps.md) 那条真实的。
 
-原因：仓库 **Settings → Actions → General → Workflow permissions** 区域里，**Allow GitHub Actions to create and approve pull requests** 复选框没勾。即使 workflow 里声明了 `pull-requests: write`，没勾这个框，`GITHUB_TOKEN` 还是建不了 PR。
-
-> 注：`NPM_TOKEN`、npm `@marcus` scope 归属、provenance 这些只在**真正 publish 时**才会绊倒你（merge Version PR 之后的第二次 push）。现在这次失败大概率还没走到那一步。
-
-### 3.2 确认方式
-
-去失败的 Release 运行日志，看挂在哪一步。如果是「Create Release Pull Request or Publish」那一步报 `Resource not accessible by integration`，就是这个权限问题。
-
-### 3.3 修复步骤（纯配置，不改代码）
-
-**第一步：开「允许 Actions 建 PR」**
-
-浏览器打开仓库 → 顶部 **Settings** → 左侧 **Actions** → **General** → 滚到下方 **Workflow permissions** 区域：
-
-1. 上半块复选框：**Allow GitHub Actions to create and approve pull requests** → **勾上**。这是 `changesets/action` 用 `GITHUB_TOKEN` 调 GitHub API 建 Version PR 的前提。
-2. 下半块单选：选 **Read and write permissions**。
-
-两块都改完，**滚到该区域最底部点绿色 Save**（这个页面每个区块独立保存，不点不生效）。
-
-**第二步（推荐但非必须）：配 `CHANGESETS_GITHUB_TOKEN`**
-
-光开上面的复选框，Version PR 能建出来，但用默认 `GITHUB_TOKEN` 建的 PR **不会触发 ci.yml**（GitHub 防递归机制）。将来给 main 加分支保护、把 CI 设成必需检查，这个 PR 永远绿不了。配 PAT 可绕过：
-
-1. GitHub 右上头像 → Settings → 左侧最底部 **Developer settings** → **Personal access tokens** → **Fine-grained tokens** → Generate new token。
-2. **Repository access**：Only select repositories → 勾中 `marcus-monorepo`。
-3. **Permissions**（Repository permissions 下）：Contents = **Read and write**，Pull requests = **Read and write**。
-4. 生成后复制 `github_pat_` 开头的串。
-5. 回仓库 Settings → Secrets and variables → Actions → New repository secret → Name 填 `CHANGESETS_GITHUB_TOKEN`，值粘贴刚才的串。
-
-[release.yml](/.github/workflows/release.yml) 已写好 `CHANGESETS_GITHUB_TOKEN || GITHUB_TOKEN` 的回退，配了就生效，没配退回默认 token。
-
-**第三步：准备 publish 前置（等 Version PR 合并后才用到，建议先备好）**
-
-真正 merge Version PR 触发 `npm publish` 时还需要：
-
-- `NPM_TOKEN`（GitHub Secret）：npm 账号建 Granular Access Token，scope 限定 `@marcus`，勾 **Allow bypass 2FA**（账号开了 2FA 才有），存为 secret。
-- npm 上 `@marcus` scope 要归你所有——注册 npm 账号时 username 会成为 scope 名，确认对得上，否则 publish 报 403 scope 未授权。
-- provenance（`NPM_CONFIG_PROVENANCE: "true"`）依赖 `id-token: write`，workflow 已声明，不用额外动。想先跳过就改成 `"false"`，不影响发布本身。
+> 注：PowerShell 里看到的中文乱码是 GBK 控制台显示问题，文件本身是 UTF-8、内容完好。
 
 ---
 
-## 4. 顺带：操作与文档不一致的两处
+## 6. 第一次 push 被拒与 rebase
 
-### 4.1 遗留的测试 changeset 没清
+### 6.1 现象
 
-文档 7.1 节写「正式发版前删掉测试残留」，但 `funny-pugs-leave.md` 只是改名成了 `bumpy-tables-grin.md`，还在。它和真正的 changeset 一起会把版本 bump 成 0.1.1，changelog 混进「修改了一些配置文件」（PowerShell 里看到的乱码，其实文件是好的，纯 GBK 显示问题）。
+```
+! [rejected] main -> main (fetch first)
+```
 
-### 4.2 `repository.url` 还是占位符
+### 6.2 原因
 
-[package.json](/packages/excel-exporter/package.json) 里 `yourbusiness/marcus-monorepo` 是占位符。push 能成说明 remote 指向的真实仓库存在，但这个值会写进 npm 包元数据和 provenance 签名，指向不存在的地址。
+在我改代码这段时间，远程发生了变化（Version PR 已被建出并 Merge）：
+
+```
+cc879b9 Merge pull request #1 ...（远程）
+8cb658a chore: release packages（机器人 bump 到 0.1.1、消费了两个 changeset）
+cefad0e fix(excel-exporter): ...（本地基于这个）
+```
+
+机器人提交 `8cb658a` 消费了 `.changeset/` 里两个 changeset，把包 bump 到 `0.1.1`，并删除了 `.changeset/` 里的两个 `.md`。
+
+### 6.3 处理
+
+```
+git pull --rebase origin main
+```
+
+rebase 干净完成，无冲突（`bumpy-tables-grin.md` 两边都删了，git 自动处理）。本地提交挪到远程最新之上。
 
 ---
 
-## 5. 具体修复动作（按优先级，含命令）
+## 7. publish 层根因：npm scope 归属
 
-### 5.1 Release 权限（纯 GitHub 设置，零风险，立刻验证）
+### 7.1 触发
 
-按第 3.3 节操作：勾「Allow GitHub Actions to create and approve pull requests」+ 选 Read and write + Save。
+确认 `@marcus/excel-exporter` 在 npm 上是 404 后，需要排查 publish 前提。确认 npm 用户名是关键。
 
-可选配 `CHANGESETS_GITHUB_TOKEN`。
+### 7.2 规则
 
-### 5.2 清理测试 changeset
+npm 的 scope 归属规则：`@scope-name` 只能由用户名（或 org 名）等于 `scope-name` 的账号发布。`@marcus` 这个 scope 只属于 npm 用户名为 `marcus` 的账号。
 
-只想发「收紧 exports + xlsx 可选 peer dep」这一个变更，留 [fix-exports-and-peer-deps.md](/.changeset/fix-exports-and-peer-deps.md)，删另一条：
+### 7.3 确认
 
-```bash
-git rm .changeset/bumpy-tables-grin.md
-git commit -m "chore: drop leftover test changeset"
+用户 npm 用户名是 `marcus_w`，不是 `marcus`。所以不管 NPM_TOKEN 对不对，`@marcus/excel-exporter` 的 publish 都会被 npm 拒绝（403 scope 未授权）。
+
+### 7.4 解决
+
+用户在 npm 新建了一个 org 名叫 `marcusok`，于是 `@marcusok` scope 归用户所有。把包名从 `@marcus/excel-exporter` 改成 `@marcusok/excel-exporter`。
+
+### 7.5 其他选项（未采用，备查）
+
+- 选项一（采用）：改 scope 到 `@marcusok`，确定能发。
+- 选项二（未用）：在 npm 建 org 叫 `marcus`，若 `marcus` 名字没被 squatter 占用则 package.json 不用改。但 `marcus` 这种短名字极可能被占，有不确定性。
+
+---
+
+## 8. scope 重命名：改动清单
+
+### 8.1 功能层（影响 publish，必须改）
+
+- [package.json](/packages/excel-exporter/package.json) 的 `name` — 核心
+- [README.md](/packages/excel-exporter/README.md) — 会发布到 npm 的安装/导入示例
+- [src/index.ts](/packages/excel-exporter/src/index.ts)、[src/types.ts](/packages/excel-exporter/src/types.ts) — JSDoc 注释里的 import 示例
+- [CHANGELOG.md](/packages/excel-exporter/CHANGELOG.md) — 标题里的包名
+- `pnpm-lock.yaml` — 实测：pnpm 按 workspace 路径引用内部包，改名不影响锁文件哈希，`pnpm install` 报 `Lockfile is up to date`，无需重新生成
+
+### 8.2 文档层（不影响 publish，为一致性一起改）
+
+- 根 [README.md](/README.md)
+- docs 下的 design / workflow / debug 三份文档
+
+### 8.3 验证
+
+`rg "@marcus/" --glob '!node_modules' --glob '!pnpm-lock.yaml'` 无匹配，仓库内 59 行对称改动，全部替换为 `@marcusok/`。`pnpm exec turbo run lint typecheck test build --force` 全绿，27 测试通过，包名已是 `@marcusok/excel-exporter@0.1.1`。
+
+---
+
+## 9. PowerShell 脚本误改编码的事故与修复
+
+### 9.1 事故
+
+scope 重命名时，用了一段 PowerShell 批量替换 docs 文件的脚本：
+
+```powershell
+Get-ChildItem -Path docs,README.md -Recurse -File | ForEach-Object {
+  (Get-Content $_.FullName -Raw) -replace '@marcus/', '@marcusok/' |
+    Set-Content -Path $_.FullName -NoNewline -Encoding UTF8
+}
 ```
 
-> 提醒：删 changeset 后再 push，Release workflow 会重新开 Version PR。确保此时 `.changeset/` 里只剩你真正想发的那一条——只要 push 到 main 且有 pending changeset，机器人就会开 PR，merge 那个 PR 等于真的发版到 npm。
+两个问题：
 
-### 5.3 改造性能测试（方案 A）
+1. **递归误伤 node_modules**：`-Recurse` 把 `node_modules` 里成千上万个第三方包的 README 也改了。好在 `node_modules` 在 `.gitignore` 里，git 不跟踪，不会进仓库。后续 `pnpm install --force`（重装 477 个包）恢复了干净状态。
+2. **编码损坏**：`Get-Content` 按 GBK 读取 UTF-8 中文 → 乱码，`Set-Content -Encoding UTF8` 写回时加了 BOM。三份 docs 中文全乱、加了 BOM。
 
-见第 2.3 节方案 A 的三步：改 `performance.test.ts`、`ci.yml`、`release.yml`。
+### 9.2 修复
 
-### 5.4 修正 repository.url
+用 git 原始内容 + .NET API 精确控制编码重写：
 
-[package.json](/packages/excel-exporter/package.json)：
+```powershell
+foreach ($f in @("docs/commit-and-release-workflow.md","docs/debug.md","docs/excel-export-design.md")) {
+  $original = git show "HEAD:$f"
+  $new = $original -replace '@marcus/', '@marcusok/'
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllLines((Resolve-Path $f).Path, $new, $utf8NoBom)
+}
+```
+
+验证：三份文档无 BOM（首字节是 `#` 的 ASCII 35），中文恢复正常，diff 行数回归正常（只含 scope 替换）。
+
+### 9.3 教训
+
+批量改文件编码时，不要用 PowerShell 的 `Get-Content`/`Set-Content` 处理含中文的 UTF-8 文件——默认走 GBK 且会加 BOM。要么用 `rg` 替换，要么显式用 `[System.IO.File]` + `UTF8Encoding($false)`。
+
+---
+
+## 10. 最终提交与 push
+
+### 10.1 提交
+
+两个本地提交：
+
+```
+21c4f2a fix(excel-exporter): rename scope to @marcusok and skip perf tests on CI
+5907517 fix(ci): skip perf tests on CI and drop test changeset
+```
+
+### 10.2 push 前确认
+
+- GitHub 仓库 Workflow permissions：Version PR 能建出说明权限已通，无需再动。
+- `NPM_TOKEN` secret：用户确认存在。
+- npm scope：`@marcusok` org 已建，归属已解决。
+
+### 10.3 push
+
+```
+git push origin main
+```
+
+push 后 CI 和 Release 同时起跑。预期：
+
+- **CI**：带 `RUN_PERF=0`，perf 4 个测试显示 skipped，其余 23 个通过，应该绿。
+- **Release**：`.changeset/` 为空走 publish 分支，质量门禁这次能过（perf 跳过），`changeset publish` 第一次真正执行，把 `@marcusok/excel-exporter@0.1.1` 发到 npm。
+
+---
+
+## 11. 问题汇总与根因地图
+
+把整个排障过程中遇到的问题按类别归一遍，供对照：
+
+**1. CI 失败**
+
+- 根因：性能测试用墙钟时间做绝对断言，shared runner 抖动必然 flake。
+- 修复：`RUN_PERF` 开关，CI 跳过、本地保留。
+
+**2. Release 失败**
+
+- 根因：同 CI——`pnpm release` 里的 `turbo run ... test` 被 perf 测试挡住，`&&` 短路，`changeset publish` 跑不到。
+- 修复：同 CI 的 `RUN_PERF` 开关（release.yml 的 job env）。
+
+**3. push 被拒**
+
+- 根因：排障期间机器人的 Version PR 已在远程合并，本地落后。
+- 修复：`git pull --rebase origin main`。
+
+**4. npm 查不到包**
+
+- 根因：质量门禁把 publish 挡住了（问题 2 的连锁结果），不是 token 或 scope 问题。
+- 修复：随问题 2 一起解决。
+
+**5. publish 会失败的隐患（暴露在问题 2 解决后）**
+
+- 根因：npm 用户名 `marcus_w` 不持有 `@marcus` scope。
+- 修复：新建 npm org `marcusok`，包名改为 `@marcusok/excel-exporter`。
+
+**6. 测试 changeset 残留**
+
+- 根因：旧版文档验证步骤的遗留文件没删。
+- 修复：`git rm`。
+
+**7. PowerShell 脚本编码事故（排障过程引入）**
+
+- 根因：批量脚本递归误伤 + GBK/BOM 编码损坏。
+- 修复：git 原始内容 + .NET UTF8 无 BOM 重写 + `pnpm install --force`。
+
+---
+
+## 12. 待观察
+
+push 后两条 workflow 的最终结果待确认。如果 Release 全绿，`@marcusok/excel-exporter@0.1.1` 将首次出现在 [npmjs.com](https://www.npmjs.com/package/@marcusok/excel-exporter)。如果 Release 仍有红的，挂在哪一步、报错是什么，需要根据具体日志进一步处理——但质量门禁（perf）和 scope 归属这两个已知的拦路虎都已清除。
+
+---
+
+## 13. 第三次失败：turbo Strict Mode 过滤了 RUN_PERF（关键修复）
+
+### 13.1 现象
+
+`21c4f2a` push 后，CI 和 Release **仍然挂在同一个 perf 测试上**：
+
+```
+src/__tests__/performance.test.ts (4 tests | 1 failed)
+  10k rows x 4 cols (main) < 200ms   490ms   expected 463 to be less than 300
+```
+
+注意：perf 测试在跑（没被 skip），说明 `RUN_PERF=0` 没生效。
+
+### 13.2 根因：turbo 的 Strict Mode
+
+ci.yml 的改动是对的（`pnpm test` 那一步带了 `env: RUN_PERF: "0"`），但 `pnpm test` = `turbo run test`。**Turbo 默认启用 Strict Mode**（官方文档原文）：
+
+> Strict Mode is the default environment handling mechanism, ensuring that only explicitly configured environment variables are made available to tasks. Tasks will only see variables listed in `env`, `globalEnv`, `passThroughEnv`, or `globalPassThroughEnv`, with any unlisted variables being filtered out.
+
+`turbo.json` 的 `globalEnv` 当时是 `["NODE_ENV", "CI", "PERF_TIGHT"]`——有 `PERF_TIGHT` 但**没有 `RUN_PERF`**。所以 turbo 启动 vitest 子进程时把 `RUN_PERF=0` 过滤掉了，vitest 里 `process.env.RUN_PERF` 是 undefined，`RUN_PERF !== "0"` 为 true，测试照跑。
+
+这就是为什么 `PERF_TIGHT` 一直能影响测试行为（它在 globalEnv 里），而新加的 `RUN_PERF` 不能（没在 globalEnv 里）。
+
+### 13.3 为什么本地验证没发现
+
+我之前的本地验证是在 `packages/excel-exporter` 目录直接跑 `pnpm test`（= `vitest run`），**绕过了 turbo 这一层**，所以 `RUN_PERF=0` 能直接被 vitest 进程拿到，验证「通过」。
+
+但 CI 走的是根目录 `pnpm test`（= `turbo run test`），中间隔着 turbo 的环境变量过滤。本地验证没复现这条真实路径，是疏漏。
+
+### 13.4 修复
+
+[turbo.json](/turbo.json) 的 `globalEnv` 加上 `RUN_PERF`：
 
 ```json
-"url": "git+https://github.com/<真实owner>/marcus-monorepo.git"
+"globalEnv": ["NODE_ENV", "CI", "PERF_TIGHT", "RUN_PERF"],
 ```
 
-顺带 `bugs.url` 里的 `yourbusiness` 一起改。确认方式：`git remote -v` 里 origin 显示的 owner。
+### 13.5 验证（这次用 turbo 真实路径）
 
----
+在**根目录**走 turbo 验证，复现 CI 的调用方式：
 
-## 6. 推荐操作顺序
+- `RUN_PERF` 不设（本地）：27 个测试全过，perf 照跑。✓
+- `RUN_PERF=0`（模拟 CI，走 `pnpm exec turbo run test --force`）：
 
-分两步验证，把问题隔离清楚：
+```
+src/__tests__/performance.test.ts (4 tests | 4 skipped)
+Test Files  4 passed | 1 skipped (5)
+Tests       23 passed | 4 skipped (27)
+```
 
-1. **先做 5.1**（纯 GitHub 设置）。推个无关紧要的改动（如 README 加一行）触发 Release，确认 Version PR 能建出来。
-2. **再做 5.2 + 5.3 + 5.4**，一个提交推上去：验证 CI 不再因 perf 挂、开出干净的 Version PR。
+4 个 perf 全部 skip，其余 23 个通过。这次是用 turbo 真实路径验证，和 CI 一致。
 
----
+### 13.6 教训
 
-## 7. 待确认事项
-
-以上 CI 判断是「本地全绿 + Linux 唯一脆点是 perf 测试」的强推断；Release 判断是「pending changeset + 文档点名的权限错误」的推断。**最稳的下一步是把那次失败的 Actions 日志贴过来**，可把猜测坐实到具体那一步、那行报错。
+**环境变量要穿过多层进程时，每一层都要能放行。** 从 GitHub Actions step → turbo → vitest，中间 turbo 这层默认会拦。改测试行为的环境变量，必须同时在 turbo.json 声明。本地验证也必须走和 CI 完全一致的调用路径（根目录 turbo，不是子目录直接跑）。
