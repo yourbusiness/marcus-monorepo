@@ -29,4 +29,6 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+        env:
+          RUN_PERF: "0"
       - run: pnpm build
