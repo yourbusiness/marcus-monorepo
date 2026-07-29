@@ -378,6 +378,12 @@ push 后 CI 和 Release 同时起跑。预期：
 - 根因：旧版文档验证步骤的遗留文件没删。
 - 修复：`git rm`。
 
+**9. publish E404（第四轮，token 缺 scope 权限）**
+
+- 根因：NPM_TOKEN 在创建 marcusok org 前就建好，权限边界没包含 @marcusok scope，PUT 报 E404。
+- 修复：重新生成覆盖 @marcusok 的 token，更新 GitHub secret，re-run Release。
+- 教训：新建 org/scope 后要同步重建 token；区分 publish 报错看关键字——Publish command exited（门禁挡）、403（scope 归属）、404（token 权限边界）、401（token 无效）。
+
 **8. PowerShell 脚本编码事故（排障过程引入）**
 
 - 根因：批量脚本递归误伤 + GBK/BOM 编码损坏。
@@ -533,12 +539,121 @@ Tests       23 passed | 4 skipped (27)
 
 ---
 
-## 15. 待观察
+## 15. 第三轮结果：质量门禁通过，publish 第一次真正执行
 
-push `87855d6` 后的结果待确认。这次三层都对齐了：
+push `87855d6` 后的结果：
 
-- **ci.yml / release.yml**：设了 `RUN_PERF: "0"`。
-- **turbo.json**：`globalEnv` 声明了 `RUN_PERF`（这次的修复）。
-- **performance.test.ts**：`describe.runIf` 读 `RUN_PERF`。
+- **CI**：✅ 成功。`RUN_PERF=0` 这次生效了（turbo.json 补了 `globalEnv`），perf 4 个测试 skip，质量门禁通过。三轮里第一次 CI 绿。
+- **Release**：✅ 质量门禁通过，`changeset publish` 第一次真正执行——不再被 `&&` 短路挡住。
 
-预期：CI 和 Release 的 perf 4 个测试显示 skipped，质量门禁通过。Release 的 `changeset publish` 将第一次真正执行，把 `@marcusok/excel-exporter@0.1.1` 发到 npm。如果仍有红的，挂在哪一步、报错是什么，需要根据具体日志进一步处理。
+至此 perf 测试这个贯穿前三轮的根因彻底解决。但 Release 在 publish 那一步报了新的错（见第 16 节），这是 publish 层的第三个子问题。
+
+---
+
+## 16. 第四轮失败：publish E404（NPM_TOKEN 缺 scope 发布权限）
+
+### 16.1 现象
+
+CI 绿了，Release 质量门禁过了，`changeset publish` 终于执行，但发布报 E404：
+
+```
+warn  Received 404 for npm info "@marcusok/excel-exporter"
+info  @marcusok/excel-exporter is being published because our local version (0.1.1) has not been published
+error E404 Not Found - PUT https://registry.npmjs.org/@marcusok%2fexcel-exporter - Not found
+error npm error code E404
+```
+
+最后：
+
+```
+packages failed to publish:
+  @marcusok/excel-exporter@0.1.1
+```
+
+### 16.2 日志逐行解读：先排除不是什么
+
+这个 404 容易误判。日志里有几条关键信息，能排除常见错误方向：
+
+**不是认证失败**。日志里有这两行：
+
+```
+npm notice publish Signed provenance statement with source and build information from GitHub Actions
+npm notice publish Provenance statement published to transparency log: https://search.sigstore.dev/?logIndex=2280026470
+```
+
+provenance 签名能成功，说明 OIDC token 认证通过、`id-token: write` 生效、`NPM_TOKEN` 是有效 token。如果 token 无效，会报 401（`ENEEDAUTH`），而不是走到 provenance 签名这一步。
+
+**不是包已存在**。404 on PUT 配合 `npm info` 也 404，说明包在 registry 上根本不存在。正常情况全新包第一次 PUT 会创建包、返回成功，不该 404。
+
+**不是 scope 归属问题**。第 7 节已经解决：`@marcusok` org 已建、归属用户。如果是 scope 不归你，报的是 403 Forbidden（`forbidden access`），不是 404。
+
+### 16.3 真正的根因：NPM_TOKEN 没有 @marcusok scope 的发布权限
+
+查询 registry 端点印证：
+
+```
+registry.npmjs.org/-/org/marcusok   → 404
+registry.npmjs.org/@marcusok        → 405
+registry.npmjs.org/@marcusok/excel-exporter → 404
+```
+
+这个 404 on PUT 是 npm registry 找不到 token 对应账号在 `@marcusok` scope 下的发布入口——token 的权限边界里没包含这个 scope。
+
+最可能的原因：**`NPM_TOKEN` 是在创建 `marcusok` org 之前就建好的**。npm token 有 scope 权限边界：
+
+- 如果是 **Granular Access Token**：建 token 时要选 scope，当时 `marcusok` org 还不存在，token 的 scope 列表里没有它，自然发不进去。
+- 如果是 **Classic Automation token**：虽然不限定 scope，但 404 on PUT 通常意味着 token 对应账号与 org 的成员关系/权限没对上。
+
+无论哪种，解法都是**重新生成 token，让它覆盖 `@marcusok` scope**。
+
+### 16.4 修复步骤
+
+**第一步：重新生成 npm token**
+
+1. 登录 [npmjs.com](https://www.npmjs.com) → 右上头像 → **Access Tokens**。
+2. 建一个新的 Granular Access Token：
+   - **Packages and scopes**：权限选 **Read and write**，把 `@marcusok` scope 加进来（org 已存在，能选到）。
+   - **Expiration**：设 1 年。
+   - 账号开了 2FA：勾 **Allow bypass 2FA for this token**。
+3. 生成后复制 `npm_` 开头的串。
+
+> 备选：用 Classic Automation token（不限定 scope、天然绕开这个问题），创建时选 "Automation" 类型即可，同样存为 `NPM_TOKEN`。
+
+**第二步：更新 GitHub secret**
+
+1. 仓库 **Settings → Secrets and variables → Actions**。
+2. 找到 `NPM_TOKEN` → 点 **Update**（编辑铅笔图标）。
+3. 粘贴新 token → Save。
+
+**第三步：重新触发 Release**
+
+`NPM_TOKEN` 更新后不用改代码。当前这次 Release 已失败结束，需要重新触发一次。最简单的办法是在 GitHub 上 re-run：
+
+1. 仓库 **Actions** tab → 左侧 **Release** workflow。
+2. 找到这次失败的那次运行 → 右上角 **Re-run failed jobs**（或 Re-run all jobs）。
+
+re-run 会用最新的 secret（含刚更新的 `NPM_TOKEN`）重跑，不用改代码、不用重新 push。
+
+### 16.5 经验：publish 层的三个子问题
+
+publish 这一关前后踩了三个坑，按暴露顺序：
+
+| 顺序 | 问题                 | 症状                                                | 根因                                            |
+| ---- | -------------------- | --------------------------------------------------- | ----------------------------------------------- |
+| 1    | 质量门禁挡住 publish | `Publish command exited with code 1`（perf 测试炸） | perf 测试 flake + turbo 过滤 RUN_PERF           |
+| 2    | scope 归属错         | （未实际触发，提前发现）                            | npm 用户名 `marcus_w` 不持有 `@marcus`          |
+| 3    | token 缺 scope 权限  | E404 on PUT                                         | token 在建 org 前生成，权限边界没含 `@marcusok` |
+
+前两个是「publish 跑不到」，第三个是「publish 跑到了但被拒」。区分这三类，看报错关键字：`Publish command exited`（门禁挡）、403（scope 归属）、404（token 权限边界）、401（token 无效）。
+
+---
+
+## 17. 待观察
+
+换 token + re-run 后的结果待确认。这次 publish 层的三个子问题都已清除：
+
+- 质量门禁：perf 已跳过（第 14 节）。
+- scope 归属：`@marcusok` org 已建（第 7 节）。
+- token 权限：换覆盖 `@marcusok` 的新 token（第 16 节）。
+
+预期 re-run 后 publish 成功，`@marcusok/excel-exporter@0.1.1` 出现在 [npmjs.com](https://www.npmjs.com/package/@marcusok/excel-exporter)。如仍有红的，根据具体报错进一步处理。
