@@ -1,5 +1,11 @@
 # @marcusok/excel-exporter
 
+## 0.1.2
+
+### Patch Changes
+
+- 31b0cfe: 修复了部分代码问题
+
 ## 0.1.1
 
 ### Patch Changes
