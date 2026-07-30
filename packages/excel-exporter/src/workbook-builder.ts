@@ -7,7 +7,11 @@ import {
 import type { SheetConfig, ColumnConfig } from "./types";
 import { buildStyleIndex } from "./style-utils";
 import { getWasmLoader } from "./wasm-loader";
-import { resolveCellFormat, numFormatForSpec } from "./format-utils";
+import {
+  resolveCellFormat,
+  numFormatForSpec,
+  validateSheetName,
+} from "./format-utils";
 import { toBlobPart } from "./download";
 
 const XLSX_MIME =
@@ -41,6 +45,7 @@ export class WorkbookBuilder {
     );
     const aoa = [headers, ...rows];
 
+    validateSheetName(config.name);
     const ws = this.wb.addSheet(config.name);
     sheetAddAoa(ws, aoa, { origin: "A1" });
 
@@ -57,13 +62,13 @@ export class WorkbookBuilder {
       if (c.width !== undefined) ws.setColumnWidth(i + 1, c.width);
     });
 
-    // Column styles: apply to all cells in the column (header + data rows).
-    // After sheetAddAoa, ws.rows holds the full data; mutating CellData.styleIndex
-    // is a plain JS property write, bypassing ws.cell(ref) ref-parsing overhead.
+    // Column styles: apply to data cells only (header stays unstyled, matching
+    // the `style: not the header` contract in types.ts). ws.rows[0] is the
+    // header row, so slice(1) iterates only data rows; mutating styleIndex is
+    // a plain JS property write, bypassing ws.cell(ref) ref-parsing overhead.
     config.columns.forEach((c, i) => {
       if (c.style) {
         const idx = buildStyleIndex(this.wb, c.style);
-        ws.cell(encodeCellRef(0, i)).styleIndex = idx;
         for (const row of ws.rows.slice(1)) {
           const cell = row.cells[i];
           if (cell) cell.styleIndex = idx;

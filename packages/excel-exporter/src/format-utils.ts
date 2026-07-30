@@ -37,11 +37,12 @@ export function applyFormat(value: unknown, spec: FormatSpec): string | number {
     case "number": {
       const n = Number(value);
       if (!Number.isFinite(n)) return toStr(value);
-      // Return a typed number so the Workbook stores a numeric cell, not text.
-      // Display precision (decimals) and grouping (thousands) are rendered via
-      // an auto-injected numFormat in workbook-builder; the streaming path has
-      // no numFormat support and emits the raw number.
-      return Number(n.toFixed(spec.decimals ?? 0));
+      // Keep full precision: the stored cell value must not be truncated.
+      // Display decimals/thousands are rendered via an auto-injected numFormat
+      // on the workbook path (see numFormatForSpec / withAutoNumFormat). The
+      // stream/SheetJS paths (no numFormat support) bake decimals into the
+      // displayed value in displayValue instead.
+      return n;
     }
     case "padding": {
       const s = toStr(value);
@@ -84,15 +85,40 @@ export function formatDateByPattern(value: unknown, pattern: string): string {
   const d = toJsDate(value);
   if (!d) return toStr(value);
   const pad = (n: number) => String(n).padStart(2, "0");
-  const tokens: Record<string, string> = {
+  // Excel format codes are case-insensitive, so normalize to lowercase first.
+  // `mm` is ambiguous: minutes when it directly follows an hour token (`hh`),
+  // otherwise the month. Scan the token stream once and resolve each `mm` from
+  // its predecessor so `yyyy-mm-dd`, `yyyy-MM-dd` and `HH:mm:ss` all match.
+  const lower = pattern.toLowerCase();
+  const parts = {
     yyyy: String(d.getFullYear()),
-    MM: pad(d.getMonth() + 1),
+    month: pad(d.getMonth() + 1),
     dd: pad(d.getDate()),
-    HH: pad(d.getHours()),
-    mm: pad(d.getMinutes()),
+    hh: pad(d.getHours()),
+    minute: pad(d.getMinutes()),
     ss: pad(d.getSeconds()),
   };
-  return pattern.replace(/yyyy|MM|dd|HH|mm|ss/g, (t) => tokens[t] ?? t);
+  const TOKEN = /yyyy|mm|dd|hh|ss/g;
+  const hits: { tok: string; idx: number }[] = [];
+  let mt: RegExpExecArray | null;
+  while ((mt = TOKEN.exec(lower)) !== null) {
+    hits.push({ tok: mt[0], idx: mt.index });
+  }
+  let out = "";
+  let lastEnd = 0;
+  for (let i = 0; i < hits.length; i++) {
+    const { tok, idx } = hits[i];
+    out += lower.slice(lastEnd, idx);
+    lastEnd = idx + tok.length;
+    if (tok === "mm") {
+      // Minute only when directly preceded by an hour token; else month.
+      out += hits[i - 1]?.tok === "hh" ? parts.minute : parts.month;
+    } else {
+      out += parts[tok as keyof typeof parts];
+    }
+  }
+  out += lower.slice(lastEnd);
+  return out;
 }
 
 /**
@@ -105,12 +131,22 @@ export function displayValue(
   row: Record<string, unknown>,
 ): string | number | boolean {
   const spec = typeof col.format === "object" ? col.format : null;
-  if (spec && (spec.type === "date" || spec.type === "datetime")) {
-    const pattern =
-      spec.type === "datetime"
-        ? (spec.pattern ?? DEFAULT_DATETIME_PATTERN)
-        : (spec.pattern ?? DEFAULT_DATE_PATTERN);
-    return formatDateByPattern(row[col.key], pattern);
+  if (spec) {
+    if (spec.type === "date" || spec.type === "datetime") {
+      const pattern =
+        spec.type === "datetime"
+          ? (spec.pattern ?? DEFAULT_DATETIME_PATTERN)
+          : (spec.pattern ?? DEFAULT_DATE_PATTERN);
+      return formatDateByPattern(row[col.key], pattern);
+    }
+    if (spec.type === "number") {
+      // Stream/SheetJS paths have no numFormat support, so the configured
+      // decimals must be baked into the displayed value here. The workbook
+      // path keeps full precision and renders decimals via numFormat instead.
+      const n = Number(row[col.key]);
+      if (!Number.isFinite(n)) return toStr(row[col.key]);
+      return Number(n.toFixed(spec.decimals ?? 0));
+    }
   }
   const v = resolveCellFormat(col, row);
   if (typeof v === "number" || typeof v === "boolean") return v;
@@ -139,4 +175,27 @@ function toJsDate(value: unknown): Date | null {
     return Number.isNaN(d.getTime()) ? null : d;
   }
   return null;
+}
+
+const SHEET_NAME_FORBIDDEN = /[\\/?*[\]:]/;
+
+/**
+ * Validate a sheet name per ECMA-376 / Excel constraints. Throws on names that
+ * would produce a corrupt workbook: empty, longer than 31 chars, or containing
+ * any of `: \ / ? * [ ]`.
+ */
+export function validateSheetName(name: string): void {
+  if (typeof name !== "string" || name.length === 0) {
+    throw new Error("[excel-exporter] sheet name must be a non-empty string");
+  }
+  if (name.length > 31) {
+    throw new Error(
+      `[excel-exporter] sheet name "${name.slice(0, 31)}…" exceeds the 31-char Excel limit`,
+    );
+  }
+  if (SHEET_NAME_FORBIDDEN.test(name)) {
+    throw new Error(
+      `[excel-exporter] sheet name "${name}" contains forbidden characters (: \\ / ? * [ ])`,
+    );
+  }
 }

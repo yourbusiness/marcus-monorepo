@@ -2,7 +2,7 @@ import { StreamingXlsxWriter, type StreamingCellInput } from "modern-xlsx";
 import type { SheetConfig } from "./types";
 import { getWasmLoader } from "./wasm-loader";
 import { toBlobPart } from "./download";
-import { displayValue } from "./format-utils";
+import { displayValue, validateSheetName } from "./format-utils";
 
 export interface StreamResult {
   bytes: Uint8Array;
@@ -35,6 +35,7 @@ export async function exportAsStream(
   for (const s of sheets) totalExpected += s.data.length;
 
   for (const config of sheets) {
+    validateSheetName(config.name);
     writer.startSheet(config.name);
     writer.writeRow(
       config.columns.map((c) => ({

@@ -64,6 +64,11 @@ describe("WorkbookBuilder round-trip", () => {
     // A has no style config -> default (null or 0)
     expect(ws.cell("A2").styleIndex).toBeNull();
 
+    // Style applies to DATA cells only, never the header row (regression guard
+    // for the bug where the header cell inherited the column data style).
+    expect(ws.cell("B1").styleIndex).toBeNull();
+    expect(ws.cell("C1").styleIndex).toBeNull();
+
     // Merge: A2:A3 (row 0 data-area, rowspan 2 -> rows 2-3 in Excel)
     expect(ws.mergeCells.some((r) => r === "A2:A3")).toBe(true);
   });
@@ -119,7 +124,9 @@ describe("WorkbookBuilder round-trip", () => {
         },
         { key: "plain", header: "Plain" },
       ],
-      data: [{ d: new Date(2025, 0, 5), n: 1234.5, plain: "x" }],
+      // 1234.567: full precision must round-trip (was truncated to 1234.57 by
+      // toFixed before the fix; decimals=2 now only affects display via numFormat).
+      data: [{ d: new Date(2025, 0, 5), n: 1234.567, plain: "x" }],
     });
     const bytes = await builder.toBuffer();
     const wb = await readBuffer(bytes);
@@ -132,6 +139,9 @@ describe("WorkbookBuilder round-trip", () => {
     // Number is a numeric cell, not text.
     expect(typeof ws.cell("B2").value).toBe("number");
     expect(ws.cell("B2").styleIndex).not.toBeNull();
+    // Full precision is preserved in the stored cell (regression guard for the
+    // toFixed truncation bug): value is 1234.567, not the display-rounded 1234.57.
+    expect(ws.cell("B2").value).toBe(1234.567);
     // Plain column (no format, no style) stays unstyled.
     expect(ws.cell("C2").styleIndex).toBeNull();
   });

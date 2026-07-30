@@ -16,15 +16,18 @@ interface WorkerResponse {
   rowCount?: number;
   engine?: "modern-xlsx";
   error?: string;
+  progress?: number;
 }
 
-let wasmReady = false;
+// Track the URL we initialized with; re-init if it changes (the main thread's
+// configureWasm can swap the URL at runtime, and we must honor the new one).
+let loadedWasmUrl: string | URL | undefined | null = null;
 self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
   const { id, options, wasmUrl, mode } = e.data;
   try {
-    if (!wasmReady) {
+    if (loadedWasmUrl !== wasmUrl) {
       await initWasm(wasmUrl);
-      wasmReady = true;
+      loadedWasmUrl = wasmUrl;
     }
 
     let bytes: Uint8Array;

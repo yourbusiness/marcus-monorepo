@@ -1,5 +1,5 @@
 import type { ExportOptions, ExportResult } from "./types";
-import { displayValue } from "./format-utils";
+import { displayValue, validateSheetName } from "./format-utils";
 import { triggerDownload } from "./download";
 
 const XLSX_MIME =
@@ -53,6 +53,7 @@ export async function exportWithSheetJS(
     const XLSX = await loadSheetJS();
     const wb = XLSX.utils.book_new();
     for (const s of options.sheets) {
+      validateSheetName(s.name);
       const aoa = [
         s.columns.map((c) => c.header),
         // Apply FormatSpec (enum/padding/number/date) for data semantics; dates

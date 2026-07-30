@@ -4,6 +4,8 @@ import {
   resolveCellFormat,
   numFormatForSpec,
   formatDateByPattern,
+  displayValue,
+  validateSheetName,
 } from "../format-utils";
 import { serialToDate } from "modern-xlsx";
 import type { ColumnConfig } from "../types";
@@ -20,14 +22,21 @@ describe("applyFormat", () => {
   });
 
   it("number: returns a typed number; grouping/precision are left to numFormat", () => {
-    // applyFormat now yields a real number so Workbook stores a numeric cell,
-    // not text. Display formatting (decimals/thousands) is rendered via the
-    // auto-injected numFormat (see numFormatForSpec).
+    // applyFormat keeps full precision: the stored cell value is never truncated.
+    // Display formatting (decimals/thousands) is rendered via the auto-injected
+    // numFormat on the workbook path (see numFormatForSpec). The stream/SheetJS
+    // paths bake decimals into displayValue instead.
     expect(
       applyFormat(1234567, { type: "number", decimals: 2, thousands: true }),
     ).toBe(1234567);
     expect(applyFormat(3, { type: "number", decimals: 2 })).toBe(3);
-    expect(applyFormat(3.14159, { type: "number", decimals: 2 })).toBe(3.14);
+    // decimals=2 must NOT truncate the stored value (3.14159 stays 3.14159);
+    // only the displayed cell rounds via numFormat.
+    expect(applyFormat(3.14159, { type: "number", decimals: 2 })).toBe(3.14159);
+    // No decimals spec -> still keeps full precision (was: 1235 via toFixed(0)).
+    expect(applyFormat(1234.567, { type: "number", thousands: true })).toBe(
+      1234.567,
+    );
   });
 
   it("padding: left/right align", () => {
@@ -121,11 +130,78 @@ describe("formatDateByPattern", () => {
     );
   });
 
+  it("is case-insensitive and resolves mm as month vs minute by context", () => {
+    const d = new Date(2025, 0, 5, 14, 30);
+    // lowercase mm in a date position is the month (was: read as minutes=30)
+    expect(formatDateByPattern(d, "yyyy-mm-dd")).toBe("2025-01-05");
+    // fully lowercase still parses
+    expect(formatDateByPattern(d, "yyyy-mm-dd hh:mm")).toBe("2025-01-05 14:30");
+    // uppercase MM right after HH is still minutes (context wins over case) --
+    // d=14:30, so HH:MM -> hour:minute = "14:30", NOT month(01).
+    expect(formatDateByPattern(d, "HH:MM")).toBe("14:30");
+    // mm without a preceding hour is the month
+    expect(formatDateByPattern(d, "mm/dd")).toBe("01/05");
+  });
+
   it("parses date-coercible strings", () => {
     expect(formatDateByPattern("2025-01-05", "yyyy-MM-dd")).toBe("2025-01-05");
   });
 
   it("returns the raw stringified value for non-date input", () => {
     expect(formatDateByPattern("not-a-date", "yyyy-MM-dd")).toBe("not-a-date");
+  });
+});
+
+describe("displayValue (stream/SheetJS number-decimals baking)", () => {
+  it("bakes decimals into the displayed value when a number spec is set", () => {
+    const col = {
+      key: "n",
+      header: "N",
+      format: { type: "number" as const, decimals: 2 },
+    };
+    // stream/SheetJS have no numFormat -> decimals applied here (1234.567 -> 1234.57)
+    expect(displayValue(col, { n: 1234.567 })).toBe(1234.57);
+    // decimals default 0 -> integer display (1234.567 -> 1235)
+    expect(
+      displayValue(
+        { key: "n", header: "N", format: { type: "number" as const } },
+        { n: 1234.567 },
+      ),
+    ).toBe(1235);
+    // no number spec -> raw value untouched
+    expect(displayValue({ key: "n", header: "N" }, { n: 1234.567 })).toBe(
+      1234.567,
+    );
+    // non-finite -> stringified, never NaN
+    expect(
+      displayValue(
+        { key: "n", header: "N", format: { type: "number" as const } },
+        { n: "abc" },
+      ),
+    ).toBe("abc");
+  });
+});
+
+describe("validateSheetName", () => {
+  it("accepts valid names", () => {
+    expect(() => validateSheetName("Sheet1")).not.toThrow();
+    expect(() => validateSheetName("a".repeat(31))).not.toThrow();
+  });
+
+  it("rejects empty / non-string names", () => {
+    expect(() => validateSheetName("")).toThrow(/non-empty/);
+    expect(() => validateSheetName(undefined as unknown as string)).toThrow(
+      /non-empty/,
+    );
+  });
+
+  it("rejects names longer than 31 chars", () => {
+    expect(() => validateSheetName("a".repeat(32))).toThrow(/31-char/);
+  });
+
+  it("rejects forbidden characters", () => {
+    for (const bad of ["a/b", "a:b", "a?b", "a*b", "a[b]", "a\\b"]) {
+      expect(() => validateSheetName(bad)).toThrow(/forbidden/);
+    }
   });
 });

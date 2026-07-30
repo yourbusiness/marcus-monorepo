@@ -12,7 +12,6 @@ export * from "./format-utils";
 export { configureWasm, getWasmLoader } from "./wasm-loader";
 export { WorkbookBuilder } from "./workbook-builder";
 export { exportAsStream } from "./streaming-builder";
-export { StylePresets } from "./style-presets";
 
 const XLSX_MIME =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -30,11 +29,22 @@ type PickedMode = { mode: ExportMode; workerMode?: "workbook" | "stream" };
 function pickMode(options: ExportOptions, totalRows: number): PickedMode {
   const explicit = options.mode ?? "auto";
   if (explicit === "stream") return { mode: "stream", workerMode: "stream" };
-  if (explicit === "worker")
+  if (explicit === "worker") {
+    // Worker mode requires a Web Worker global. In environments without one
+    // (Node/SSR), fall back to the main-thread path so styles are preserved
+    // instead of silently degrading to the style-less SheetJS fallback.
+    const isBrowser =
+      typeof Worker !== "undefined" && typeof window !== "undefined";
+    if (!isBrowser) {
+      return totalRows >= STREAM_THRESHOLD
+        ? { mode: "stream", workerMode: "stream" }
+        : { mode: "main" };
+    }
     return {
       mode: "worker",
       workerMode: totalRows >= STREAM_THRESHOLD ? "stream" : "workbook",
     };
+  }
   if (explicit === "main") return { mode: "main" };
 
   // auto

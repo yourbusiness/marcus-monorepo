@@ -657,3 +657,124 @@ publish 这一关前后踩了三个坑，按暴露顺序：
 - token 权限：换覆盖 `@marcusok` 的新 token（第 16 节）。
 
 预期 re-run 后 publish 成功，`@marcusok/excel-exporter@0.1.1` 出现在 [npmjs.com](https://www.npmjs.com/package/@marcusok/excel-exporter)。如仍有红的，根据具体报错进一步处理。
+---
+
+## 18. 代码逻辑排障：四类 bug + 次要项（全量梳理后修复）
+
+> 本节记录对 `@marcusok/excel-exporter` 全量代码梳理后发现并修复的逻辑问题。与第 1-17 节的 CI/Release 主题不同，这一轮是**业务代码逻辑**：表头样式、日期模式、数值精度、模式路由、worker 状态、类型一致性、输入校验。每一条都先在 Node 下实际复现出错误现象，再修，最后回归验证。
+
+### 18.0 方法论：先复现，再动手
+
+不靠读代码臆断。对每个疑似 bug 临时写一个 `repro.test.ts`，用真实数据跑出现象，确认"它确实错了"之后才改。改完用同样的输入断言修复结果，再删临时文件。四条主 bug 的原始现象：
+
+| #   | bug                     | 复现输入                                                     | 复现现象（改前）                                               | 修复后                                            |
+| --- | ----------------------- | ------------------------------------------------------------ | -------------------------------------------------------------- | ------------------------------------------------- |
+| 1   | 表头被套数据列样式      | `WorkbookBuilder` + 列配 `StylePresets.danger`               | `A1.styleIndex = 1`（表头带样式）                              | `A1.styleIndex = null`（表头干净），`A2` 仍带样式 |
+| 2   | 小写 `mm` 当分钟        | `formatDateByPattern(d, "yyyy-mm-dd")`，d=`2025-01-05 14:30` | `"2025-30-05"`（mm→分钟 30）                                   | `"2025-01-05"`（mm→月份 01）                      |
+| 3   | number 默认取整丢精度   | `applyFormat(1234.567, { type:"number", thousands:true })`   | `1235`（toFixed(0) 截断）                                      | `1234.567`（全精度存入）                          |
+| 4   | Node 强制 worker→丢样式 | Node 下 `exportExcel({ mode:"worker", … })`                  | `engine:"sheetjs"`（new Worker 抛错→降级 SheetJS，样式被剥离） | `engine:"modern-xlsx"`（退主线程，保住样式）      |
+
+### 18.1 bug #1：表头被套上数据列样式（明确 bug）
+
+**位置**：`workbook-builder.ts` 的 `applyLayout`。
+
+```ts
+config.columns.forEach((c, i) => {
+  if (c.style) {
+    const idx = buildStyleIndex(this.wb, c.style);
+    ws.cell(encodeCellRef(0, i)).styleIndex = idx; // ← 行 0 = A1 = 表头
+    for (const row of ws.rows.slice(1)) {
+      // ← 这行本就只遍历数据行
+      const cell = row.cells[i];
+      if (cell) cell.styleIndex = idx;
+    }
+  }
+});
+```
+
+**依据**：`encodeCellRef(0, i)` 第一参是 0 基行号，行 0 = A1 = 表头。同文件 merges 里 `encodeCellRef(m.row + 1, …)` 用 `+1` 跳过表头（`m.row=0` 是第一条数据行），正好印证。而下一行 `ws.rows.slice(1)` 已经正确跳过表头——所以第 66 行是**多余且错误**的赋值。与 `types.ts` 注释 `/** Style applied to all data cells in this column (not the header). */` 直接矛盾。
+
+**后果**：给列配 `StylePresets.currency`（右对齐 + `#,##0.00`）或 `danger`（红字加粗），表头也被右对齐/染红。现有 `builder.test.ts` 只断言 `A2/B2/C2`（数据格），没断言表头，所以漏检。
+
+**修复**：删掉 `ws.cell(encodeCellRef(0, i)).styleIndex = idx;` 这一行。`ws.rows.slice(1)` 本就只覆盖数据行。
+
+### 18.2 bug #2：小写 `mm` 被当成分钟（明确 bug）
+
+**位置**：`format-utils.ts` 的 `formatDateByPattern`，仅 stream / SheetJS 路径走（workbook 用 numFormat）。
+
+```ts
+const tokens = { yyyy:…, MM: pad(月), dd:…, HH:…, mm: pad(分钟), ss:… };
+return pattern.replace(/yyyy|MM|dd|HH|mm|ss/g, (t) => tokens[t] ?? t);
+```
+
+**依据**：Excel 格式码大小写不敏感；`mm` 是月还是分钟取决于上下文（紧跟 `HH`/`hh` 才是分钟，否则是月）。这里用大小写硬区分，`StylePresets.date` 自身用的 `yyyy-mm-dd` 会被错解。实测 `d=2025-01-05 14:30`，`yyyy-mm-dd` → `2025-30-05`（mm 取了分钟 30）。现有测试只覆盖大写 `MM`，没覆盖小写 `mm`。
+
+**修复**：重写为——先 `toLowerCase()`，再扫描 token 流，`mm` 仅当**紧跟 `hh`** 才作分钟，否则作月份。保证 `yyyy-mm-dd`、`yyyy-MM-dd`、`HH:mm:ss`、`dd/MM/yyyy HH:mm:ss` 全部正确。
+
+### 18.3 bug #3：number 格式默认取整，与同文件注释矛盾（精度隐患）
+
+**位置**：`format-utils.ts` 的 `applyFormat`。
+
+```ts
+case "number": {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return toStr(value);
+  // 注释（改前）：Display precision … are rendered via an auto-injected numFormat …
+  return Number(n.toFixed(spec.decimals ?? 0));   // ← 把精度烤进了存储值
+}
+```
+
+**依据**：`numFormatForSpec` 已会按 `decimals`/`thousands` 生成 Excel numFormat，显示精度本应由 numFormat 负责（注释也这么说）。但 `applyFormat` 又 `toFixed` 把**存进单元格的真实值**截断了。默认 `decimals` 缺省 = 0：`1234.567` → `1235`，小数部分整段丢失；`decimals:2` → `1234.57`，用户只想"显示两位"，底层数据却被永久截断，读回 xlsx 拿不回原值。`format.test.ts` 里 `3.14159 → 3.14` 说明取整是**有意为之**，与 41-42 行注释自相矛盾，且默认取整是 footgun。
+
+**修复**：workbook 路径 `applyFormat` 返回原始 `n`（不截断，靠 numFormat 控显示）；stream/SheetJS 路径没有 numFormat，在 `displayValue` 里把 `decimals` 烤进显示值。即"显示归显示、存储归存储"。验证：`1234.567` 全精度存入，workbook 读回仍是 `1234.567`。
+
+### 18.4 bug #4：Node 下强制 worker 模式静默丢样式（降级行为错误）
+
+**位置**：`index.ts` 的 `pickMode`。
+
+```ts
+if (explicit === "worker") return { mode:"worker", … };   // ← 不判环境
+```
+
+**依据**：`auto` 用 `typeof Worker !== "undefined" && typeof window !== "undefined"` 判浏览器，Node 走 `main`/`stream`，没问题。但**显式** `mode:"worker"` 绕过这个判定，直接进 worker 分支；Node 无 Web Worker 全局，`new Worker(...)` 抛 ReferenceError，被 catch 后落到 `exportWithSheetJS`——**样式被剥离**。用户想"强制 worker"反而拿到无样式版，而非更合理的主线程 Workbook（带样式）。README 只说 worker 在 Node 不可用，没提示强开会丢样式。
+
+**修复**：`mode:"worker"` 且无 Worker 全局时，退 `main`（<50k）或 `stream`（≥50k），保住样式，不降级到 SheetJS。验证：Node 下 `mode:"worker"` → `engine:"modern-xlsx"`。
+
+### 18.5 次要项（设计/类型/校验）
+
+**#5 worker 不响应新 wasmUrl** — `export.worker.ts`：`wasmReady` 布尔换成 `loadedWasmUrl`，URL 变化时重新 `initWasm`。主线程 `configureWasm({ wasmUrl })` 会重置主 loader，但常驻 worker 旧逻辑 `wasmReady=true` 后忽略新 URL；冷启动没问题，运行期换 URL 会不一致。
+
+**#6 worker 响应类型缺 progress 变体** — `export.worker.ts`：`WorkerResponse` 补 `progress?: number`。运行时确实会 `postMessage({ id, progress })`，主线程靠 `"progress" in data` 兜底分发（运行时正确），但两边类型对不上，纯类型不一致。
+
+**#7a 重复导出** — `index.ts`：删掉 `export { StylePresets }`（已被 `export * from "./style-presets"` 覆盖）。
+
+**#7b sheet 名无校验** — `types.ts` 注释声称"1-31 chars, ECMA-376 validation"，但代码里 workbook/stream/SheetJS 三条路径建表前都没校验。新增 `validateSheetName`（`format-utils.ts`），对空名、>31 字符、含 `: \ / ? * [ ]` 抛错，三条路径建表前统一调用。
+
+### 18.6 改动清单（8 源文件 + 1 新测试）
+
+```
+ packages/excel-exporter/src/__tests__/builder.test.ts   | 12 ++-   （#1 表头无样式回归 + #3 全精度断言）
+ packages/excel-exporter/src/__tests__/format.test.ts    | 84 +++++-（#2 大小写/上下文 mm + #3 精度 + displayValue + validateSheetName）
+ packages/excel-exporter/src/__tests__/routing.test.ts   | 新增     （#4 路由回归 + Node auto→stream）
+ packages/excel-exporter/src/fallback.ts                 |  3 +-    （#7b validateSheetName）
+ packages/excel-exporter/src/format-utils.ts             | 93 ++++-- （#2 formatDateByPattern 重写 + #3 精度拆分 + validateSheetName）
+ packages/excel-exporter/src/index.ts                    | 14 +-    （#4 pickMode 环境感知 + #7a 删重复导出）
+ packages/excel-exporter/src/streaming-builder.ts        |  3 +-    （#7b validateSheetName）
+ packages/excel-exporter/src/workbook-builder.ts         | 15 +--   （#1 删表头样式 + #7b validateSheetName）
+ packages/excel-exporter/src/workers/export.worker.ts    |  9 +-    （#5 wasmUrl 重载 + #6 progress 类型）
+ 8 files changed, 199 insertions(+), 34 deletions(-)
+```
+
+### 18.7 验证
+
+- **复现 → 修复 → 回归**：临时 `repro.test.ts` 先跑出 4 个 bug 的真实现象；修复后用同样输入断言修复结果（4/4 过）；再删临时文件。
+- **正式测试**：`format.test.ts` 更新 number 断言、新增大小写/上下文 mm 用例与 `displayValue`/`validateSheetName` 用例；`builder.test.ts` 加表头无样式回归守卫与全精度断言；新增 `routing.test.ts` 覆盖 #4。
+- **全量门禁**：`vitest run` 35/35 通过；`tsc --noEmit`、`eslint src`、`tsup` 全部干净（含 170KB 自包含 worker bundle）。
+
+### 18.8 教训
+
+- **测试断言点要覆盖到"不该变"的格**：#1 表头本不该带样式，但测试只断言数据格，表头成了盲区。回归守卫必须显式锁住"预期不变"的单元格，而不只是"预期变了"的。
+- **大小写/同形符号要测全**：#2 只测了大写 `MM`，小写 `mm` 是 Excel 最常见写法却漏测。格式相关逻辑要覆盖大小写等价。
+- **"有意为之"与"注释说的"要一致**：#3 注释说精度交给 numFormat，代码却 `toFixed` 截断——这种自相矛盾是 footgun 的高发区，改之前要确认哪个才是真实意图。
+- **降级路径的"静默副作用"要审计**：#4 catch 之后落到 SheetJS 会无声剥样式。降级不是"能跑就行"，要检查降级后的能力损失是否可接受（丢样式通常不可接受）。
+- **声明与实现要对齐**：#7b 注释写了校验、代码没有，是典型的"文档领先于实现"债务。
