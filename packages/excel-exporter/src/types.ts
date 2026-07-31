@@ -57,7 +57,16 @@ export interface ColumnConfig {
   width?: number;
   /** Style applied to all data cells in this column (not the header). */
   style?: CellStyle;
-  /** Value formatter: FormatSpec (worker-compatible) or function (main/Node only). */
+  /**
+   * Value formatter: FormatSpec (worker-compatible) or function (main/Node only).
+   *
+   * Cross-path precision: a `{ type: "number" }` spec without `decimals`
+   * defaults to 0, but only the stream path (>= STREAM_THRESHOLD, 50,000 rows)
+   * bakes `toFixed(0)` into the stored cell value. The Workbook path keeps full
+   * precision and renders decimals via numFormat, so the same spec can store
+   * `9999.99` (Workbook) vs `10000` (stream). Always set `decimals` explicitly
+   * for cross-threshold consistency (see docs/excel-export-design.md 4.8).
+   */
   format?:
     | FormatSpec
     | ((

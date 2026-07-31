@@ -1,35 +1,34 @@
-﻿# @marcusok/excel-exporter
+# @marcusok/excel-exporter · 高性能 Excel 导出引擎
 
-High-performance Excel export engine built on [modern-xlsx](https://github.com/ABCrimson/modern-xlsx) (Rust + WASM). Free cell styles, number formats, data validation, freeze panes, and streaming export for very large datasets 鈥?features SheetJS charges for.
+基于 [modern-xlsx](https://github.com/ABCrimson/modern-xlsx)（Rust + WASM）构建的高性能 Excel 导出库。提供声明式 API、自动模式路由、完整单元格样式、Web Worker 多线程、流式写入以及 SheetJS 降级保底。
 
-## Why
+## 性能参考
 
-SheetJS Community Edition cannot **write** styles (paid Pro only) and chokes on large exports. `modern-xlsx` is MIT-licensed, WASM-accelerated, and writes full styling for free. This package wraps it with a friendly, declarative API and automatic routing between a fast in-memory path (鈮?0k rows, full styles) and a constant-memory streaming path (鈮?0k rows).
+modern-xlsx@1.2.0，Node v22.22.2，4 列混合类型，独立进程首次实测（来源：[设计文档 1.2/附录 A](../../docs/excel-export-design.md)）：
 
-## Performance (verified, 4 cols, independent-process first run)
+| 数据量  | Workbook 路径 | Stream 路径 | auto 路由         |
+| ------- | ------------- | ----------- | ----------------- |
+| 1 万行  | 109ms         | 184ms       | Worker + Workbook |
+| 5 万行  | 618ms         | 824ms       | Worker + Stream   |
+| 10 万行 | 17,541ms ⚠️   | **1,548ms** | Worker + Stream   |
 
-| Rows | Path     | End-to-end       | Notes                                             |
-| ---- | -------- | ---------------- | ------------------------------------------------- |
-| 10k  | Workbook | ~120 ms          | sheetAddAoa ~22ms + toBuffer ~100ms               |
-| 50k  | Workbook | ~580鈥?30 ms     | styles + freeze + autofilter                      |
-| 100k | Stream   | ~1.6鈥?.8 s      | writeRow ~1.5s + finish ~100ms                    |
-| 100k | Workbook | **~21 s** 鈿狅笍 | toBuffer cliff 鈥?why the stream threshold exists |
+> `Workbook.toBuffer()` 在 ~5.5 万行开始超线性塌方（10 万行耗时 17 秒）。`StreamingXlsxWriter` 恒定 ~1.5 秒。`STREAM_THRESHOLD=50_000` 确保了安全余量。
 
-> `Workbook.toBuffer()` has a severe performance cliff beyond ~55k rows (verified: 100k rows takes ~21s on a cold process, vs ~600ms hot). The 50k stream threshold is deliberately conservative. Within a single long-lived process the second 100k run is ~600ms (hot cache) 鈥?but real browser exports are first-runs, so design for the cold number.
-
-Main-thread blocking budget: worker mode does one structured-clone `postMessage` (~9ms/10k, ~46ms/50k, ~94ms/100k), all WASM work runs off-thread.
-
-## Install
+## 安装
 
 ```bash
 pnpm add @marcusok/excel-exporter modern-xlsx
 ```
 
-`modern-xlsx` is a peerDependency (must be installed explicitly so the WASM singleton is process-global). Optionally add `xlsx` for the SheetJS fallback path.
+环境：Node >= 22、pnpm >= 9。modern-xlsx@1.2.0 声明 `engines.node>=24`，但其 WASM 核心面向浏览器；本包在 Node 22 下 35 个测试全部通过。本包在 1.2.0 上开发测试，推荐消费方锁定此版本（peerDep 兼容范围 `^1.2.0`，但未验证更高版本）。
 
-## Configure (browser)
+> modern-xlsx 声明为 `peerDependency`，消费方必须显式安装。原因：(1) `modern-xlsx.wasm`（1.9MB）需由消费方作为静态资源部署，隐式依赖会掩盖这一硬性要求；(2) peerDep 语义上正确——本包是 modern-xlsx 的封装，版本控制权在消费方；(3) pnpm 默认不自动安装 peerDep。`xlsx`（SheetJS）为 optional peerDep，仅在需要降级保底时安装。
 
-Two static assets must be reachable at runtime: the WASM binary and the worker script. Copy them into your public dir (Vite example):
+## 配置（浏览器）
+
+两份静态资源必须在消费方站点可访问：`modern-xlsx.wasm`（1.9MB）和 `export.worker.js`。
+
+推荐 Vite 插件在 `buildStart` 中从 `require.resolve` 反推真实路径拷贝到 `public/assets/`，避免硬编码 `node_modules`（pnpm 符号链接不兼容）。详见 [设计文档 6.2](../../docs/excel-export-design.md)。
 
 ```ts
 // vite.config.ts
@@ -52,11 +51,10 @@ export default defineConfig({
           "public/assets/modern-xlsx.wasm",
         );
         const workerSrc = `${resolveDistDir("@marcusok/excel-exporter")}/export.worker.js`;
-        if (!statSync(workerSrc, { throwIfNoEntry: false })) {
+        if (!statSync(workerSrc, { throwIfNoEntry: false }))
           throw new Error(
-            `export.worker.js not found 鈥?run pnpm build in the package first. Looked at: ${workerSrc}`,
+            `export.worker.js not found. Run pnpm build first. Looked at: ${workerSrc}`,
           );
-        }
         copyFileSync(workerSrc, "public/assets/export.worker.js");
       },
     },
@@ -65,89 +63,99 @@ export default defineConfig({
 ```
 
 ```ts
-// main.ts 鈥?point the loader at the copied assets
+// main.ts
 import { configureWasm } from "@marcusok/excel-exporter";
-
 configureWasm({
   wasmUrl: "/assets/modern-xlsx.wasm",
   workerUrl: "/assets/export.worker.js",
 });
 ```
 
-## Usage
+## 用法
 
 ```ts
 import { exportExcel, StylePresets } from "@marcusok/excel-exporter";
 
 await exportExcel({
-  filename: "sales-report",
+  filename: "销售明细-2026",
   sheets: [
     {
-      name: "Sales",
+      name: "销售明细",
       freezeRows: 1,
       autoFilter: true,
       columns: [
-        { key: "product", header: "Product", width: 20 },
+        { key: "orderId", header: "订单号", width: 18 },
         {
-          key: "revenue",
-          header: "Revenue",
-          width: 14,
+          key: "amount",
+          header: "金额",
+          width: 12,
           style: StylePresets.currency,
         },
         {
-          key: "createdAt",
-          header: "Date",
-          width: 16,
-          style: StylePresets.date,
-        },
-        {
           key: "status",
-          header: "Status",
+          header: "状态",
           width: 10,
-          // FormatSpec is worker-compatible (functions cannot be structured-cloned)
           format: {
             type: "enum",
-            map: { paid: "Paid", pending: "Pending" },
-            fallback: "?",
+            map: { paid: "已支付", pending: "待支付" },
+            fallback: "未知",
           },
         },
       ],
-      data: rows, // auto-routing: <500 main, 500鈥?9,999 worker+workbook, 鈮?0,000 worker+stream
+      data: [{ orderId: "ORD-001", amount: 9999.99, status: "paid" }],
     },
   ],
 });
 ```
 
-### Format
+### 自动路由
 
-`ColumnConfig.format` accepts either a `FormatSpec` (worker-safe) or a function (main/Node only 鈥?stripped in worker mode with a warning). Built-in spec types: `enum`, `date`, `datetime`, `number` (decimals + thousands), `padding` (zero-pad order IDs, etc.).
+`index.ts` 的 `pickMode()` 根据数据量自动选择最优路径（可通过 `mode` 参数覆盖）：
 
-### Mode routing (`auto`)
+| 数据量        | 浏览器            | Node/SSR |
+| ------------- | ----------------- | -------- |
+| < 500 行      | main              | main     |
+| 500–49,999 行 | Worker + Workbook | main     |
+| >= 50,000 行  | Worker + Stream   | stream   |
 
-| Rows        | Browser                                  | Node   |
-| ----------- | ---------------------------------------- | ------ |
-| < 500       | main                                     | main   |
-| 500鈥?9,999 | worker + workbook (full styles)          | main   |
-| 鈮?50,000   | worker + stream (no StyleBuilder styles) | stream |
+Worker 路径的主线程只做一次结构化克隆 `postMessage`（10 万行 ~94ms），WASM 工作在 Worker 线程执行。Workbook 路径支持完整 `CellStyle`；Stream v1 不支持 `StyleBuilder` 样式（Phase 2 规划中）。
 
-Force a mode with `mode: 'main' | 'worker' | 'stream'`.
+### 样式预设
 
-### Fallback
+[`src/style-presets.ts`](./src/style-presets.ts) 提供 7 种预设：`header`（粗体/深蓝底白字）、`currency`（千分位/两位小数）、`date`/`datetime`、`percent`、`dataRow`（左对齐/底部淡灰线）、`danger`（红色粗体）。支持自定义 `CellStyle`（字体/填充色/对齐/边框/数字格式），颜色用 6 位 RGB hex（如 `'FF0000'`）。
 
-If WASM is unsupported or fails to load after retries, the export degrades to SheetJS (no styles, data only). The result carries `engine: 'sheetjs'` and a non-fatal `error` for monitoring. SheetJS is loaded from the consumer install or the official CDN.
+### 值格式化
+
+[`src/types.ts`](./src/types.ts)。Worker 模式受结构化克隆限制不能传函数，提供声明式 `FormatSpec`：
+
+| 类型       | 示例                                                          | 说明             |
+| ---------- | ------------------------------------------------------------- | ---------------- |
+| `enum`     | `{ type: "enum", map: { paid: "已支付" }, fallback: "未知" }` | 枚举映射         |
+| `number`   | `{ type: "number", decimals: 2, thousands: true }`            | 数字精度与千分位 |
+| `date`     | `{ type: "date", pattern: "yyyy/MM/dd" }`                     | 日期序列化       |
+| `datetime` | `{ type: "datetime", pattern: "yyyy-MM-dd HH:mm:ss" }`        | 日期时间序列化   |
+| `padding`  | `{ type: "padding", fill: "0", length: 6, align: "left" }`    | 字符串补齐       |
+
+`main` 模式额外支持函数形式：`format: (v) => v ? "是" : "否"`。
+
+### 降级保底
+
+WASM 不支持或加载失败时自动降级 SheetJS（[`src/fallback.ts`](./src/fallback.ts)）。降级导出无样式，但保证数据可用。`ExportResult.engine` 标记 `'sheetjs'` 便于监控降级率。
 
 ## API
 
-- `exportExcel(options): Promise<ExportResult>` 鈥?main entry.
-- `configureWasm(opts)` 鈥?set `wasmUrl` / `workerUrl` / `timeoutMs` / `maxRetries`.
-- `WorkbookBuilder` 鈥?direct batch-write builder (鈮?0k rows, full styles).
-- `exportAsStream(sheets)` 鈥?direct streaming export (鈮?0k rows).
-- `StylePresets` 鈥?`header`, `currency`, `percent`, `date`, `datetime`, `dataRow`, `danger`.
-- `exportInWorker` / `terminateWorker` (`@marcusok/excel-exporter/worker-utils`) 鈥?manual worker lifecycle control.
+- `exportExcel(options)` — 统一入口，自动路由。
+- `configureWasm(opts)` — 设置 `wasmUrl`/`workerUrl`/`timeoutMs`/`maxRetries`。
+- `WorkbookBuilder` — 批量构建器（<5 万行，完整样式）。
+- `exportAsStream(sheets)` — 流式导出（>=5 万行）。
+- `StylePresets` — 七种预设样式。
+- `exportInWorker` / `terminateWorker`（`@marcusok/excel-exporter/worker-utils`，源码入口 `src/worker-exporter.ts`） — 手动 Worker 生命周期控制。
 
-## Node usage
+## Node 用法
 
-Node has no Web Worker, so worker mode is unavailable 鈥?`auto` runs `main` (鈮?0k) or `stream` (鈮?0k) on the calling thread. Use `initWasmSync` for test setup (Node's `fetch` rejects `file://`):
+Node 无 Web Worker，auto 路由退化为 main（<5 万行）或 stream（>=5 万行）在主线程执行。
+
+以下代码仅在测试环境需要（`exportExcel()` 在生产代码中会自动加载 WASM，无需手动调用）。Node 的 `fetch` 拒绝 `file://` 协议，vitest 等测试框架需通过 `initWasmSync` 同步加载：
 
 ```ts
 import { readFileSync } from "node:fs";
@@ -161,8 +169,17 @@ initWasmSync(
 );
 ```
 
-**Node version:** This package declares `engines.node >=22` and its CI runs on Node 22. Its peer `modern-xlsx` officially declares `>=24`, but the WASM core is browser-targeted and all package tests pass on Node 22. If you hit a server-side issue, the Node version is the first thing to check.
+Node 版本：本包 `engines.node >=22`，CI 跑 Node 22。peer modern-xlsx 声明 `>=24`，但 WASM 核心面向浏览器，Node 22 全绿。
+
+## 设计决策摘要
+
+- **5 万行割点**：toBuffer 在 5.5–6 万行塌方。`STREAM_THRESHOLD=50_000`（分支 `>=`），<5 万行 Workbook（完整样式、更快），>=5 万行 stream。
+- **Worker 阈值 500 行**：1 万行 10 列 main 实测 263ms 全阻塞。500 行以下 <15ms 可接受。
+- **ESM-only**：modern-xlsx 仅导出 ESM，本包不提供 CJS。
+- **format 的 Worker 兼容**：函数无法跨结构化克隆。Worker/Stream 仅接受 `FormatSpec`，`exportInWorker` 剥离函数格式。
+- **Stream v1 无样式**：`StreamingXlsxWriter` 不支持 `StyleBuilder`。`width`/`freezeRows` 等在 stream 下仅 warn 后丢弃。
+- **并发安全**：Worker 通信用 requestId 路由 + `pending: Map`，`onmessage` 只注册一次。
 
 ## License
 
-MIT.
+MIT
