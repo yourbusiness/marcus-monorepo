@@ -1,5 +1,11 @@
 # @marcusok/excel-exporter
 
+## 0.1.3
+
+### Patch Changes
+
+- c474368: 改了一下小配置
+
 ## 0.1.2
 
 ### Patch Changes
