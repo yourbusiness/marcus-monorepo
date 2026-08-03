@@ -1,0 +1,61 @@
+# API: exportExcel & Configuration
+
+## exportExcel
+
+```ts
+exportExcel(options: ExportOptions): Promise<ExportResult>
+```
+
+The single entry point. Routes to main / worker / stream by row count and environment, degrading to SheetJS when WASM is unavailable.
+
+## ExportOptions
+
+| Field        | Type                                               | Required | Description                                   |
+| ------------ | -------------------------------------------------- | -------- | --------------------------------------------- |
+| `sheets`     | `SheetConfig[]`                                    | ✅       | At least one sheet                            |
+| `filename`   | `string`                                           | ✅       | Download name; `.xlsx` is appended if missing |
+| `mode`       | `"auto" \| "main" \| "worker" \| "stream"`         | —        | Default `"auto"`                              |
+| `onProgress` | `(progress: number) => void`                       | —        | 0 → 1; effective on worker/stream paths       |
+| `onPhase`    | `(phase: ExportPhase, durationMs: number) => void` | —        | `init` / `build` / `download` timings         |
+| `download`   | `boolean`                                          | —        | Default `true`; `false` returns the Blob only |
+
+## ExportResult
+
+| Field       | Type                         | Description                  |
+| ----------- | ---------------------------- | ---------------------------- |
+| `success`   | `boolean`                    | Whether the export succeeded |
+| `blob?`     | `Blob`                       | The file content             |
+| `engine?`   | `"modern-xlsx" \| "sheetjs"` | Engine actually used         |
+| `mode?`     | `ExportMode`                 | Mode actually used           |
+| `duration?` | `number`                     | Total duration in ms         |
+| `rowCount?` | `number`                     | Exported row count           |
+| `error?`    | `Error`                      | Failure reason               |
+
+## configureWasm
+
+```ts
+configureWasm(options: LoaderOptions): void
+```
+
+| Field        | Default  | Description                                      |
+| ------------ | -------- | ------------------------------------------------ |
+| `wasmUrl`    | —        | Self-hosted `modern-xlsx.wasm` URL               |
+| `workerUrl`  | —        | `export.worker.js` URL; required for worker mode |
+| `timeoutMs`  | `10_000` | Per-attempt load timeout                         |
+| `maxRetries` | `3`      | Load retries (exponential backoff)               |
+
+## Other exported symbols
+
+- `WorkbookBuilder.create()` + `addSheet(config)` + `toBuffer()`: batch build with full styling;
+- `exportAsStream(sheets, onProgress?)`: lower-level streaming, returns `{ bytes, rowCount }`;
+- `getWasmLoader()`: access the global WASM loader (state: idle / loading / ready / error).
+
+```ts
+import {
+  exportExcel,
+  configureWasm,
+  WorkbookBuilder,
+  exportAsStream,
+  getWasmLoader,
+} from "@marcusok/excel-exporter";
+```

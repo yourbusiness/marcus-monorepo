@@ -1,0 +1,61 @@
+# API：exportExcel 与配置
+
+## exportExcel
+
+```ts
+exportExcel(options: ExportOptions): Promise<ExportResult>
+```
+
+唯一入口函数。根据数据量与环境自动路由到 main / worker / stream，WASM 不可用时降级 SheetJS。
+
+## ExportOptions
+
+| 字段         | 类型                                               | 必填 | 说明                                            |
+| ------------ | -------------------------------------------------- | ---- | ----------------------------------------------- |
+| `sheets`     | `SheetConfig[]`                                    | ✅   | 工作表配置，至少一个                            |
+| `filename`   | `string`                                           | ✅   | 下载文件名，缺 `.xlsx` 后缀自动补全             |
+| `mode`       | `"auto" \| "main" \| "worker" \| "stream"`         | —    | 默认 `"auto"`，按行数自动路由                   |
+| `onProgress` | `(progress: number) => void`                       | —    | 0 → 1；worker/stream 路径有效                   |
+| `onPhase`    | `(phase: ExportPhase, durationMs: number) => void` | —    | `init` / `build` / `download` 阶段耗时          |
+| `download`   | `boolean`                                          | —    | 默认 `true` 触发浏览器下载；`false` 只返回 Blob |
+
+## ExportResult
+
+| 字段        | 类型                         | 说明                         |
+| ----------- | ---------------------------- | ---------------------------- |
+| `success`   | `boolean`                    | 是否成功                     |
+| `blob?`     | `Blob`                       | 导出文件内容                 |
+| `engine?`   | `"modern-xlsx" \| "sheetjs"` | 实际使用的引擎               |
+| `mode?`     | `ExportMode`                 | 实际使用的模式               |
+| `duration?` | `number`                     | 完整导出耗时（ms）           |
+| `rowCount?` | `number`                     | 导出行数                     |
+| `error?`    | `Error`                      | 失败原因（兜底路径也会返回） |
+
+## configureWasm
+
+```ts
+configureWasm(options: LoaderOptions): void
+```
+
+| 字段         | 默认值   | 说明                                     |
+| ------------ | -------- | ---------------------------------------- |
+| `wasmUrl`    | —        | 自托管 `modern-xlsx.wasm` 地址           |
+| `workerUrl`  | —        | `export.worker.js` 地址，worker 模式必填 |
+| `timeoutMs`  | `10_000` | 单次加载超时                             |
+| `maxRetries` | `3`      | 加载重试次数（指数退避）                 |
+
+## 其他导出符号
+
+- `WorkbookBuilder.create()` + `addSheet(config)` + `toBuffer()`：批量化构建，完整样式；
+- `exportAsStream(sheets, onProgress?)`：底层流式导出，返回 `{ bytes, rowCount }`；
+- `getWasmLoader()`：访问全局 WASM 加载器（状态：idle / loading / ready / error）。
+
+```ts
+import {
+  exportExcel,
+  configureWasm,
+  WorkbookBuilder,
+  exportAsStream,
+  getWasmLoader,
+} from "@marcusok/excel-exporter";
+```

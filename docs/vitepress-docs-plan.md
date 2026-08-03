@@ -1,6 +1,6 @@
 # 公开技术文档站（VitePress）建设方案
 
-> 状态：待评审。本文基于仓库现状、VitePress 官方文档与 npm 实测数据整理，供评审后进入实施。
+> 状态：已实施（2026-08-03 落地于 `apps/vitepress`，含中英双语、GitHub Pages 部署工作流与在线 demo）。本文保留作为设计与决策依据。
 
 ## 1. 目标
 
@@ -22,7 +22,7 @@
 | 编排      | Turborepo 2.x；`build` 任务 `dependsOn: ["^build"]`，`outputs: ["dist/**"]`                         |
 | 语言/环境 | TypeScript 5.9、Node >= 22（`.nvmrc` = 22）、ESM-only                                               |
 | workspace | `pnpm-workspace.yaml` 目前只包含 `packages/*`，**没有 apps/**                                       |
-| 现有包    | `@marcusok/excel-exporter`（v0.1.3，已发布）、`@marcusok/playground`（私有）                        |
+| 现有包    | `@marcusok/excel-exporter`（v0.2.0，已发布）、`@marcusok/playground`（私有）                        |
 | CI/CD     | `.github/workflows/ci.yml`（lint/typecheck/test/build）、`release.yml`（changesets 发布 npm）       |
 | 内部文档  | 根目录 `docs/` 存放设计/流程文档（excel-export-design.md 等），属于内部文档，与公开文档站**不混用** |
 

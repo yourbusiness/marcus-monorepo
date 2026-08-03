@@ -32,7 +32,8 @@
     "./dist/export.worker.js": {
       "import": "./dist/export.worker.js",
       "default": "./dist/export.worker.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",

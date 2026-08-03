@@ -1,0 +1,90 @@
+name: Deploy Docs to GitHub Pages
+
+on:
+  # Runs on pushes to the default branch
+  push:
+    branches: [main]
+    paths:
+      - "apps/vitepress/**"
+      # Any package can contribute docs/registry data (versions, examples),
+      # so trigger on the whole packages/ tree instead of a per-package list.
+      - "packages/**"
+      - ".github/workflows/deploy.yml"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+      - "turbo.json"
+      - "tsconfig.base.json"
+
+  # Allows running this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between the run
+# in-progress and the latest queued. Do NOT cancel in-progress runs: production
+# deployments should be allowed to complete.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # Build job
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HUSKY: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Needed for `lastUpdated`
+
+      - uses: pnpm/action-setup@v4
+        # version omitted: action reads `packageManager` from package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Cache VitePress
+        uses: actions/cache@v4
+        with:
+          path: apps/vitepress/.vitepress/cache
+          # Source-only globs: generated wasm/worker and node_modules must not
+          # participate in the cache key (slow, and flaky with symlinks).
+          key: ${{ runner.os }}-vitepress-${{ hashFiles('pnpm-lock.yaml', 'apps/vitepress/**/*.md', 'apps/vitepress/**/*.{ts,vue,css}', 'apps/vitepress/package.json', 'apps/vitepress/turbo.json', 'packages/excel-exporter/package.json', 'packages/excel-exporter/src/**/*.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-vitepress-
+
+      - uses: actions/configure-pages@v6
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build with VitePress
+        # turbo builds @marcusok/excel-exporter first (docs app depends on it),
+        # then the docs app copies wasm/worker into public/assets and builds.
+        run: pnpm exec turbo run build --filter=@marcusok/docs
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: apps/vitepress/.vitepress/dist
+
+  # Deployment job
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    needs: build
+    runs-on: ubuntu-latest
+    name: Deploy
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -10,6 +10,11 @@ export default tseslint.config(
       "**/coverage/**",
       "**/.mxlsx-*/**",
       "**/e2e-check/**",
+      "apps/vitepress/.vitepress/cache/**",
+      // Node scripts/config without tsconfig coverage (linted by their own
+      // package scopes / run as tests, not by the root type-aware config).
+      "apps/vitepress/eslint.config.mjs",
+      "apps/vitepress/scripts/**",
       "eslint.config.mjs",
       "packages/excel-exporter/tsup.config.ts",
       "packages/excel-exporter/vitest.config.ts",
