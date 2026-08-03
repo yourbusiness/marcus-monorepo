@@ -2158,6 +2158,23 @@ export function toBlobPart(bytes: Uint8Array): BlobPart {
 }
 ```
 
+### 4.14 阶段耗时上报（`onPhase`）
+
+`ExportOptions.onPhase(phase, durationMs)` 在每个阶段完成时回调一次，供 playground
+指标面板做阶段分解（与 `onProgress` 的百分比不同，它给出的是各阶段真实墙钟毫秒数）：
+
+- `init`：WASM 初始化。主线程路径测 `loader.ensureLoaded()`；worker 路径由
+  `export.worker.ts` 在真正执行 `initWasm()` 时测量并回传（实例已缓存则不上报该阶段）。
+  SheetJS 降级路径不涉及 WASM，无 `init` 阶段。
+- `build`：工作簿构建（Workbook / 流式构建 / SheetJS 建表写文件）。若 modern-xlsx
+  构建失败后降级到 SheetJS，会依次上报两次 `build`——对应两次真实发生的构建尝试，
+  而不是合并成一个数字。
+- `download`：`triggerDownload` 的同步开销，仅 `download !== false` 且浏览器环境时上报。
+
+该回调不影响 `ExportResult.duration`（仍为整次导出的总耗时，保持向后兼容）。实现位置：
+主线程路径在 `index.ts` 打点；worker 路径由 `export.worker.ts` 测量、经 phase 消息
+回传后由 `worker-exporter.ts` 转发；降级路径在 `fallback.ts` 打点。
+
 ---
 
 ## 五、性能优化策略

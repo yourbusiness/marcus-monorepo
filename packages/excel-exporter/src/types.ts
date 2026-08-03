@@ -99,6 +99,24 @@ export interface SheetConfig {
 /** Export mode. */
 export type ExportMode = "auto" | "main" | "worker" | "stream";
 
+/**
+ * Named export stages, reported through `onPhase` as they complete. Phases are
+ * strictly sequential within one export call.
+ *
+ * - `"init"`: WASM initialization. Main-thread paths measure
+ *   `loader.ensureLoaded()`; worker mode measures the worker's `initWasm()`
+ *   (only reported when the worker actually re-initializes, not when its WASM
+ *   instance is already cached). Not reported by the SheetJS fallback (no WASM).
+ * - `"build"`: workbook construction. Covers the Workbook/stream builder, or
+ *   SheetJS's sheet building + write in the fallback path. A failed modern-xlsx
+ *   build followed by a SheetJS fallback reports two `"build"` phases, one per
+ *   actual build attempt.
+ * - `"download"`: the synchronous browser download trigger
+ *   (`triggerDownload`); only reported when `download !== false`. Not reported
+ *   in Node (no `document`).
+ */
+export type ExportPhase = "init" | "build" | "download";
+
 /** Export options. */
 export interface ExportOptions {
   sheets: SheetConfig[];
@@ -107,6 +125,13 @@ export interface ExportOptions {
   mode?: ExportMode;
   /** Progress callback (0-1); effective in worker/stream mode only. */
   onProgress?: (progress: number) => void;
+  /**
+   * Optional per-stage timing callback. Receives the phase name and its
+   * wall-clock duration in ms (0 means the phase did no work, e.g. WASM was
+   * already loaded). Useful for metrics/playground panels; does not affect
+   * `ExportResult.duration` (which keeps measuring the whole export).
+   */
+  onPhase?: (phase: ExportPhase, durationMs: number) => void;
   /** Trigger browser download (default true). Set false to only return a Blob. */
   download?: boolean;
 }

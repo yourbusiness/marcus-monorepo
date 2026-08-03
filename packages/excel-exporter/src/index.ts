@@ -100,38 +100,50 @@ export async function exportExcel(
     (picked.mode === "stream" && typeof window === "undefined")
   ) {
     try {
+      const initStart = performance.now();
       await loader.ensureLoaded();
+      options.onPhase?.("init", performance.now() - initStart);
       options.onProgress?.(0);
       let result: ExportResult;
-      if (picked.workerMode === "stream") {
-        const { bytes, rowCount } = await exportAsStream(
-          options.sheets,
-          options.onProgress,
-        );
-        result = {
-          success: true,
-          blob: new Blob([toBlobPart(bytes)], { type: XLSX_MIME }),
-          engine: "modern-xlsx",
-          mode: "stream",
-          duration: performance.now() - start,
-          rowCount,
-        };
-      } else {
-        const builder = await WorkbookBuilder.create();
-        options.sheets.forEach((s) => builder.addSheet(s));
-        const bytes = await builder.toBuffer();
-        result = {
-          success: true,
-          blob: new Blob([toBlobPart(bytes)], { type: XLSX_MIME }),
-          engine: "modern-xlsx",
-          mode: "main",
-          duration: performance.now() - start,
-          rowCount: totalRows,
-        };
+      const buildStart = performance.now();
+      try {
+        if (picked.workerMode === "stream") {
+          const { bytes, rowCount } = await exportAsStream(
+            options.sheets,
+            options.onProgress,
+          );
+          result = {
+            success: true,
+            blob: new Blob([toBlobPart(bytes)], { type: XLSX_MIME }),
+            engine: "modern-xlsx",
+            mode: "stream",
+            duration: performance.now() - start,
+            rowCount,
+          };
+        } else {
+          const builder = await WorkbookBuilder.create();
+          options.sheets.forEach((s) => builder.addSheet(s));
+          const bytes = await builder.toBuffer();
+          result = {
+            success: true,
+            blob: new Blob([toBlobPart(bytes)], { type: XLSX_MIME }),
+            engine: "modern-xlsx",
+            mode: "main",
+            duration: performance.now() - start,
+            rowCount: totalRows,
+          };
+        }
+      } finally {
+        // Reported even when the build throws, so a failed attempt that falls
+        // back to SheetJS still shows how long it spent before failing.
+        options.onPhase?.("build", performance.now() - buildStart);
       }
       options.onProgress?.(1);
-      if (options.download !== false)
+      if (options.download !== false) {
+        const downloadStart = performance.now();
         triggerDownload(result.blob!, options.filename);
+        options.onPhase?.("download", performance.now() - downloadStart);
+      }
       return result;
     } catch (e) {
       return exportWithSheetJS(options, start, (e as Error).message);
@@ -144,8 +156,11 @@ export async function exportExcel(
     const result = await exportInWorker(options, picked.workerMode!);
     options.onProgress?.(1);
     if (result.success) {
-      if (options.download !== false)
+      if (options.download !== false) {
+        const downloadStart = performance.now();
         triggerDownload(result.blob!, options.filename);
+        options.onPhase?.("download", performance.now() - downloadStart);
+      }
       return result;
     }
     // Worker export failed (e.g. WASM init error inside the worker) -> degrade

@@ -9,6 +9,7 @@ interface PendingEntry {
   resolve: (b: Uint8Array, rowCount: number) => void;
   reject: (e: Error) => void;
   onProgress?: (progress: number) => void;
+  onPhase?: (phase: "init" | "build", durationMs: number) => void;
 }
 
 let worker: Worker | null = null;
@@ -32,8 +33,16 @@ interface WorkerProgressResponse {
   id: number;
   progress: number;
 }
+interface WorkerPhaseResponse {
+  id: number;
+  phase: "init" | "build";
+  duration: number;
+}
 type WorkerResponse =
-  WorkerOkResponse | WorkerErrResponse | WorkerProgressResponse;
+  | WorkerOkResponse
+  | WorkerErrResponse
+  | WorkerProgressResponse
+  | WorkerPhaseResponse;
 
 function getOrCreateWorker(): Worker {
   if (worker) return worker;
@@ -52,6 +61,10 @@ function getOrCreateWorker(): Worker {
     // Progress messages do not complete the export; forward and keep pending.
     if ("progress" in data) {
       p.onProgress?.(data.progress);
+      return;
+    }
+    if ("phase" in data) {
+      p.onPhase?.(data.phase, data.duration);
       return;
     }
     pending.delete(data.id);
@@ -117,6 +130,7 @@ export async function exportInWorker(
             reject(e);
           },
           onProgress: options.onProgress,
+          onPhase: (phase, duration) => options.onPhase?.(phase, duration),
         });
         w.postMessage({
           id,

@@ -50,6 +50,9 @@ export async function exportWithSheetJS(
     `[excel-exporter] Falling back to SheetJS (styles stripped). Reason: ${reason}`,
   );
   try {
+    // Build phase includes the lazy SheetJS load (local module or CDN), which
+    // is the dominant cost of this path when WASM is unavailable.
+    const buildStart = performance.now();
     const XLSX = await loadSheetJS();
     const wb = XLSX.utils.book_new();
     for (const s of options.sheets) {
@@ -65,7 +68,12 @@ export async function exportWithSheetJS(
     }
     const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
     const blob = new Blob([out], { type: XLSX_MIME });
-    if (options.download !== false) triggerDownload(blob, options.filename);
+    options.onPhase?.("build", performance.now() - buildStart);
+    if (options.download !== false) {
+      const downloadStart = performance.now();
+      triggerDownload(blob, options.filename);
+      options.onPhase?.("download", performance.now() - downloadStart);
+    }
     const totalRows = options.sheets.reduce((s, sh) => s + sh.data.length, 0);
     return {
       success: true,

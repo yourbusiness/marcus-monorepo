@@ -146,6 +146,7 @@ WASM 不支持或加载失败时自动降级 SheetJS（[`src/fallback.ts`](./src
 
 - `exportExcel(options)` — 统一入口，自动路由。
 - `configureWasm(opts)` — 设置 `wasmUrl`/`workerUrl`/`timeoutMs`/`maxRetries`。
+- `onPhase(phase, durationMs)`（`exportExcel` 选项）— 阶段耗时回调：`init`（WASM 初始化）/ `build`（工作簿构建）/ `download`（触发下载），每阶段完成时上报一次毫秒数，供指标面板做阶段分解；不影响返回结果里的 `duration`。
 - `WorkbookBuilder` — 批量构建器（<5 万行，完整样式）。
 - `exportAsStream(sheets)` — 流式导出（>=5 万行）。
 - `StylePresets` — 七种预设样式。

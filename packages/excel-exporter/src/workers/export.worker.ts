@@ -26,10 +26,17 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
   const { id, options, wasmUrl, mode } = e.data;
   try {
     if (loadedWasmUrl !== wasmUrl) {
+      const initStart = performance.now();
       await initWasm(wasmUrl);
       loadedWasmUrl = wasmUrl;
+      (self as unknown as Worker).postMessage({
+        id,
+        phase: "init",
+        duration: performance.now() - initStart,
+      });
     }
 
+    const buildStart = performance.now();
     let bytes: Uint8Array;
     let rowCount: number;
 
@@ -46,6 +53,12 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       bytes = await builder.toBuffer();
       rowCount = options.sheets.reduce((sum, s) => sum + s.data.length, 0);
     }
+
+    (self as unknown as Worker).postMessage({
+      id,
+      phase: "build",
+      duration: performance.now() - buildStart,
+    });
 
     const resp: WorkerResponse = {
       id,

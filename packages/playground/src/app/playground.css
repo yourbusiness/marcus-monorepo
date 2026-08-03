@@ -1,0 +1,28 @@
+/*
+ * 内容区自定义滚动条。
+ * antd 6 未提供 Scrollbar 组件（官方 issue #50711 仍在讨论），
+ * 这里采用与 antd Table 内部滚动条一致的 CSS 方案：
+ * 细轨道 + 圆角半透明 thumb，亮/暗主题下都保持可见。
+ */
+.playground-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+}
+
+.playground-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.playground-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.playground-scroll::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.45);
+}
+
+.playground-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7);
+}
