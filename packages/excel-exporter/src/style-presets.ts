@@ -1,4 +1,4 @@
-﻿import type { CellStyle } from "./types";
+import type { CellStyle } from "./types";
 
 export const StylePresets = {
   /** Header: bold, dark-blue fill, white text, centered. */

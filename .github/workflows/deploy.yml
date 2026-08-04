@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "apps/vitepress/**"
+      - "apps/docs/**"
       # Any package can contribute docs/registry data (versions, examples),
       # so trigger on the whole packages/ tree instead of a per-package list.
       - "packages/**"
@@ -54,10 +54,10 @@ jobs:
       - name: Cache VitePress
         uses: actions/cache@v4
         with:
-          path: apps/vitepress/.vitepress/cache
+          path: apps/docs/.vitepress/cache
           # Source-only globs: generated wasm/worker and node_modules must not
           # participate in the cache key (slow, and flaky with symlinks).
-          key: ${{ runner.os }}-vitepress-${{ hashFiles('pnpm-lock.yaml', 'apps/vitepress/**/*.md', 'apps/vitepress/**/*.{ts,vue,css}', 'apps/vitepress/package.json', 'apps/vitepress/turbo.json', 'packages/excel-exporter/package.json', 'packages/excel-exporter/src/**/*.ts') }}
+          key: ${{ runner.os }}-vitepress-${{ hashFiles('pnpm-lock.yaml', 'apps/docs/**/*.md', 'apps/docs/**/*.{ts,vue,css}', 'apps/docs/package.json', 'apps/docs/turbo.json', 'packages/excel-exporter/package.json', 'packages/excel-exporter/src/**/*.ts') }}
           restore-keys: |
             ${{ runner.os }}-vitepress-
 
@@ -74,7 +74,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: apps/vitepress/.vitepress/dist
+          path: apps/docs/.vitepress/dist
 
   # Deployment job
   deploy:

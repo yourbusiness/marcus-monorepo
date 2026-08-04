@@ -1,0 +1,27 @@
+{
+  "name": "@marcusok/docs",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Public documentation site for marcus-monorepo packages (VitePress, zh-CN default + en).",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "vitepress dev --port 5174",
+    "build": "vitepress build",
+    "preview": "vitepress preview --port 4174",
+    "lint": "eslint .vitepress src env.d.ts && node --check scripts/check-i18n.mjs",
+    "typecheck": "vue-tsc --noEmit",
+    "check-i18n": "node scripts/check-i18n.mjs",
+    "test": "node scripts/check-i18n.mjs"
+  },
+  "dependencies": {
+    "@marcusok/excel-exporter": "workspace:*",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "vitepress": "^1.6.4"
+  }
+}

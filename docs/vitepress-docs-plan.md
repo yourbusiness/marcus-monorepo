@@ -1,6 +1,6 @@
 # 公开技术文档站（VitePress）建设方案
 
-> 状态：已实施（2026-08-03 落地于 `apps/vitepress`，含中英双语、GitHub Pages 部署工作流与在线 demo）。本文保留作为设计与决策依据。
+> 状态：已实施（2026-08-03 落地于 `apps/docs`，含中英双语、GitHub Pages 部署工作流与在线 demo）。本文保留作为设计与决策依据。
 
 ## 1. 目标
 
@@ -22,7 +22,7 @@
 | 编排      | Turborepo 2.x；`build` 任务 `dependsOn: ["^build"]`，`outputs: ["dist/**"]`                         |
 | 语言/环境 | TypeScript 5.9、Node >= 22（`.nvmrc` = 22）、ESM-only                                               |
 | workspace | `pnpm-workspace.yaml` 目前只包含 `packages/*`，**没有 apps/**                                       |
-| 现有包    | `@marcusok/excel-exporter`（v0.2.0，已发布）、`@marcusok/playground`（私有）                        |
+| 现有包    | `@marcusok/excel-exporter`（v0.2.0，已发布）、`@marcusok/play`（私有）                              |
 | CI/CD     | `.github/workflows/ci.yml`（lint/typecheck/test/build）、`release.yml`（changesets 发布 npm）       |
 | 内部文档  | 根目录 `docs/` 存放设计/流程文档（excel-export-design.md 等），属于内部文档，与公开文档站**不混用** |
 
@@ -72,21 +72,21 @@ configure-pages@v4 / upload-pages-artifact@v3 / deploy-pages@v4（实测各 Acti
 - `base: '/marcus-monorepo/'`（项目站点子路径部署必配，否则资源 404；真实仓库名确定后校准，支持用环境变量覆盖以便将来接自定义域名）；
 - 触发：`push` 到 `main` + `workflow_dispatch` 手动触发；
 - 构建：`pnpm install --frozen-lockfile` + `pnpm turbo run build --filter=@marcusok/docs`（turbo 会自动先构建上游依赖 excel-exporter）；
-- 缓存：`actions/cache` 缓存 `apps/vitepress/.vitepress/cache`，加速构建；
+- 缓存：`actions/cache` 缓存 `apps/docs/.vitepress/cache`，加速构建；
 - `lastUpdated` 需要 `fetch-depth: 0`。
 
 ### 3.3 与 monorepo 的集成方式
 
-- `pnpm-workspace.yaml` 增加 `apps/*`，使 apps/vitepress 作为 workspace 包参与 `pnpm install`；
+- `pnpm-workspace.yaml` 增加 `apps/*`，使 apps/docs 作为 workspace 包参与 `pnpm install`；
 - 文档站提供 `dev / build / preview` 脚本并接入 turbo：根 `pnpm build` 会一并构建文档站，**CI 每次 PR 都会验证文档可构建**，提前发现问题；
-- 文档站输出目录是 `.vitepress/dist`（不符合根 turbo 的 `dist/**` 输出规则），因此在 `apps/vitepress/turbo.json` 用 `{"extends": ["//"]}` 覆写 `build.outputs` 为 `[".vitepress/dist/**"]`；
-- 根 package.json 增加 `docs:dev` / `docs:build` 便捷脚本（`turbo run ... --filter=@marcusok/docs`）；
+- 文档站输出目录是 `.vitepress/dist`（不符合根 turbo 的 `dist/**` 输出规则），因此在 `apps/docs/turbo.json` 用 `{"extends": ["//"]}` 覆写 `build.outputs` 为 `[".vitepress/dist/**"]`；
+- 根 package.json 增加 `dev:docs` / `build:docs` 便捷脚本（`turbo run ... --filter=@marcusok/docs`）；
 - 文档站 v1 不接入 lint/typecheck（VitePress 构建本身会校验 config；根 eslint 面向 React/TS，`.vue` 组件需要额外的 vue 解析器，暂不引入，避免为文档站污染根工具链）；文档站通过 turbo build 在 CI 中持续受检。
 
 ## 4. 目录结构
 
 ```text
-apps/vitepress/                          # workspace 包 @marcusok/docs（private）
+apps/docs/                          # workspace 包 @marcusok/docs（private）
 ├─ package.json                          # scripts: dev / build / preview
 ├─ tsconfig.json                         # 覆盖 .vitepress 与 src（仅做编辑器/类型支持）
 ├─ turbo.json                            # extends ["//"]，覆写 build.outputs
@@ -113,7 +113,7 @@ apps/vitepress/                          # workspace 包 @marcusok/docs（privat
 
 ### 新增包的约定（可拓展性核心）
 
-1. 在 `apps/vitepress/packages/<name>/` 建文档目录（guide / examples / api）；
+1. 在 `apps/docs/packages/<name>/` 建文档目录（guide / examples / api）；
 2. 在 `.vitepress/registry.ts` 增加一条记录（npm 名、简介、版本来源、目录、关键词）；
 3. 侧边栏、顶部导航、首页包卡片**全部由 registry 自动生成**，无需再改三处；
 4. 包版本号在构建期从 `packages/<name>/package.json` 读取，**不手工硬编码**，发版后文档自动同步。
@@ -179,7 +179,7 @@ apps/vitepress/                          # workspace 包 @marcusok/docs（privat
 - checkout@v4 / pnpm/action-setup@v4 / setup-node@v4（node 22, cache: pnpm，与 ci.yml 一致）；
 - `pnpm install --frozen-lockfile`；
 - `pnpm exec turbo run build --filter=@marcusok/docs`；
-- 上传 `apps/vitepress/.vitepress/dist`；
+- 上传 `apps/docs/.vitepress/dist`；
 - Pages 专用 Actions 版本按官方示例选取（实施时以官方 deploy 文档最新示例为准，当前为 configure-pages@v4 / upload-pages-artifact@v3 / deploy-pages@v4；实测最新 major 为 v6/v5/v5）。
 
 ### 8.2 一次性前置条件（需用户确认/执行）

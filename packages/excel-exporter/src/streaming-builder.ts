@@ -1,16 +1,12 @@
 import { StreamingXlsxWriter, type StreamingCellInput } from "modern-xlsx";
 import type { SheetConfig } from "./types";
 import { getWasmLoader } from "./wasm-loader";
-import { toBlobPart } from "./download";
 import { displayValue, validateSheetName } from "./format-utils";
 
 export interface StreamResult {
   bytes: Uint8Array;
   rowCount: number;
 }
-
-const XLSX_MIME =
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 /**
  * Streaming export -- the only viable path for >=50k rows.
@@ -75,12 +71,4 @@ export async function exportAsStream(
   onProgress?.(1);
   const bytes = writer.finish();
   return { bytes, rowCount: totalRows };
-}
-
-/** Convenience wrapper returning a Blob. */
-export async function exportAsStreamBlob(
-  sheets: SheetConfig[],
-): Promise<{ blob: Blob; rowCount: number }> {
-  const { bytes, rowCount } = await exportAsStream(sheets);
-  return { blob: new Blob([toBlobPart(bytes)], { type: XLSX_MIME }), rowCount };
 }

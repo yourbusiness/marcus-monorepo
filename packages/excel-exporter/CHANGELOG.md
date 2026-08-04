@@ -5,12 +5,12 @@
 ### Minor Changes
 
 - cb98c84: feat: `exportExcel` 新增 `onPhase` 阶段耗时回调（`init` / `build` / `download`），
-  每个阶段完成时上报实际毫秒数，便于 playground 指标面板展示下载链路的分阶段耗时。
+  每个阶段完成时上报实际毫秒数，便于 play 指标面板展示下载链路的分阶段耗时。
 
 ### Patch Changes
 
 - f182d80: fix some config error
-- cb98c84: 添加了playground
+- cb98c84: 添加了play
 
 ## 0.1.3
 

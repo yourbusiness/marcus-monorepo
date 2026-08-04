@@ -2160,7 +2160,7 @@ export function toBlobPart(bytes: Uint8Array): BlobPart {
 
 ### 4.14 阶段耗时上报（`onPhase`）
 
-`ExportOptions.onPhase(phase, durationMs)` 在每个阶段完成时回调一次，供 playground
+`ExportOptions.onPhase(phase, durationMs)` 在每个阶段完成时回调一次，供 play
 指标面板做阶段分解（与 `onProgress` 的百分比不同，它给出的是各阶段真实墙钟毫秒数）：
 
 - `init`：WASM 初始化。主线程路径测 `loader.ensureLoaded()`；worker 路径由

@@ -128,7 +128,7 @@ export interface ExportOptions {
   /**
    * Optional per-stage timing callback. Receives the phase name and its
    * wall-clock duration in ms (0 means the phase did no work, e.g. WASM was
-   * already loaded). Useful for metrics/playground panels; does not affect
+   * already loaded). Useful for metrics/play panels; does not affect
    * `ExportResult.duration` (which keeps measuring the whole export).
    */
   onPhase?: (phase: ExportPhase, durationMs: number) => void;

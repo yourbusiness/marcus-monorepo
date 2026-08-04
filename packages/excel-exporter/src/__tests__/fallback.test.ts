@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import { exportWithSheetJS } from "../fallback";
 import type { ExportOptions } from "../types";
 

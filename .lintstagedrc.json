@@ -1,7 +1,7 @@
 {
   "*.{ts,tsx,mjs,js}": ["eslint --fix", "prettier --write"],
   "*.vue": [
-    "eslint --fix --config apps/vitepress/eslint.config.mjs",
+    "eslint --fix --config apps/docs/eslint.config.mjs",
     "prettier --write"
   ],
   "*.{json,md,yaml,yml}": ["prettier --write"]

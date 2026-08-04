@@ -8,7 +8,7 @@ coverage/
 .e2e/
 e2e-output.xlsx
 
-# docs site (apps/vitepress)
-apps/vitepress/.vitepress/cache/
-apps/vitepress/public/assets/modern-xlsx.wasm
-apps/vitepress/public/assets/export.worker.js
+# docs site (apps/docs)
+apps/docs/.vitepress/cache/
+apps/docs/public/assets/modern_xlsx_wasm_bg.wasm
+apps/docs/public/assets/export.worker.js
