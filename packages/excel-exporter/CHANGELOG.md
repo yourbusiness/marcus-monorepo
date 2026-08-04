@@ -1,5 +1,15 @@
 # @marcusok/excel-exporter
 
+## 0.3.0
+
+### Minor Changes
+
+- bbb89a6: 添加在线文档
+
+### Patch Changes
+
+- ed3e961: Expose `./package.json` in the exports map so consumers (e.g. the docs site) can read the installed version at runtime.
+
 ## 0.2.0
 
 ### Minor Changes
