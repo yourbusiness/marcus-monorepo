@@ -25,7 +25,7 @@ let loadedWasmUrl: string | URL | undefined | null = null;
 self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
   const { id, options, wasmUrl, mode } = e.data;
   try {
-    if (loadedWasmUrl !== wasmUrl) {
+    if (mode !== "stream" && loadedWasmUrl !== wasmUrl) {
       const initStart = performance.now();
       await initWasm(wasmUrl);
       loadedWasmUrl = wasmUrl;

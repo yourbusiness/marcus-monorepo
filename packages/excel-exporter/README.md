@@ -4,15 +4,15 @@
 
 ## 性能参考
 
-modern-xlsx@1.2.0，Node v22.22.2，4 列混合类型，独立进程首次实测（来源：[设计文档 1.2/附录 A](../../docs/excel-export-design.md)）：
+Node v22.22.2，4 列混合类型，本机独立进程实测（性能回归见 `src/__tests__/performance.test.ts`）：
 
-| 数据量  | Workbook 路径 | Stream 路径 | auto 路由         |
-| ------- | ------------- | ----------- | ----------------- |
-| 1 万行  | 109ms         | 184ms       | Worker + Workbook |
-| 5 万行  | 618ms         | 824ms       | Worker + Stream   |
-| 10 万行 | 17,541ms ⚠️   | **1,548ms** | Worker + Stream   |
+| 数据量  | auto 路由   | 实测耗时 | 硬性要求 |
+| ------- | ----------- | -------- | -------- |
+| 1 万行  | Workbook    | ~117ms   | < 200ms  |
+| 5 万行  | Fast stream | ~377ms   | < 500ms  |
+| 10 万行 | Fast stream | ~762ms   | < 1000ms |
 
-> `Workbook.toBuffer()` 在 ~5.5 万行开始超线性塌方（10 万行耗时 17 秒）。`StreamingXlsxWriter` 恒定 ~1.5 秒。`STREAM_THRESHOLD=50_000` 确保了安全余量。
+> 大文件路径不再依赖 `modern-xlsx` 的 `StreamingXlsxWriter`，而是用 `fflate` 同步压缩一个 minimal OOXML 工作簿。它在 100k×4 列场景下比原 WASM streaming 快约 2 倍，且避开 `Workbook.toBuffer()` 在 5.5 万行后的超线性塌方。
 
 ## 安装
 
@@ -112,13 +112,13 @@ await exportExcel({
 
 `index.ts` 的 `pickMode()` 根据数据量自动选择最优路径（可通过 `mode` 参数覆盖）：
 
-| 数据量        | 浏览器            | Node/SSR |
-| ------------- | ----------------- | -------- |
-| < 500 行      | main              | main     |
-| 500–49,999 行 | Worker + Workbook | main     |
-| >= 50,000 行  | Worker + Stream   | stream   |
+| 数据量           | 浏览器               | Node/SSR |
+| ---------------- | -------------------- | -------- |
+| < 20,000 行      | main                 | main     |
+| 20,000–49,999 行 | Worker + Workbook    | main     |
+| >= 50,000 行     | Worker + Fast stream | stream   |
 
-Worker 路径的主线程只做一次结构化克隆 `postMessage`（10 万行 ~94ms），WASM 工作在 Worker 线程执行。Workbook 路径支持完整 `CellStyle`；Stream v1 不支持 `StyleBuilder` 样式（Phase 2 规划中）。
+Worker 路径的主线程只做一次结构化克隆 `postMessage`（10 万行 ~94ms），导出工作在 Worker 线程执行。Workbook 路径支持完整 `CellStyle`；Fast stream 与原先的 stream 一样不支持 `StyleBuilder`/布局样式，`width`/`freezeRows` 等仅 warn 后丢弃。
 
 ### 样式预设
 
@@ -148,7 +148,7 @@ WASM 不支持或加载失败时自动降级 SheetJS（[`src/fallback.ts`](./src
 - `configureWasm(opts)` — 设置 `wasmUrl`/`workerUrl`/`timeoutMs`/`maxRetries`。
 - `onPhase(phase, durationMs)`（`exportExcel` 选项）— 阶段耗时回调：`init`（WASM 初始化）/ `build`（工作簿构建）/ `download`（触发下载），每阶段完成时上报一次毫秒数，供指标面板做阶段分解；不影响返回结果里的 `duration`。
 - `WorkbookBuilder` — 批量构建器（<5 万行，完整样式）。
-- `exportAsStream(sheets)` — 流式导出（>=5 万行）。
+- `exportAsStream(sheets)` — 大文件导出（>=5 万行）。
 - `exportTable(options)` — 常见表格数据便捷导出，支持 AntD `title`/`dataIndex` 与 Element Plus `label`/`prop` 命名。
 - `exportEcharts(options)` — 常见 ECharts 数据便捷导出，支持类目轴多系列、饼图 `name/value`、散点 `[x,y]`。
 - `StylePresets` — 七种预设样式。
@@ -177,11 +177,11 @@ Node 版本：本包 `engines.node >=22`，CI 跑 Node 22。peer modern-xlsx 声
 
 ## 设计决策摘要
 
-- **5 万行割点**：toBuffer 在 5.5–6 万行塌方。`STREAM_THRESHOLD=50_000`（分支 `>=`），<5 万行 Workbook（完整样式、更快），>=5 万行 stream。
-- **Worker 阈值 500 行**：1 万行 10 列 main 实测 263ms 全阻塞。500 行以下 <15ms 可接受。
+- **5 万行割点**：`STREAM_THRESHOLD=50_000`（分支 `>=`），<5 万行 Workbook（完整样式），>=5 万行 Fast stream。
+- **Worker 阈值 20,000 行**：小于 2 万行走 main（10k×6 列浏览器实测约 120ms）；2 万行以上走 Worker，避免主线程长阻塞。
 - **ESM-only**：modern-xlsx 仅导出 ESM，本包不提供 CJS。
 - **format 的 Worker 兼容**：函数无法跨结构化克隆。Worker/Stream 仅接受 `FormatSpec`，`exportInWorker` 剥离函数格式。
-- **Stream v1 无样式**：`StreamingXlsxWriter` 不支持 `StyleBuilder`。`width`/`freezeRows` 等在 stream 下仅 warn 后丢弃。
+- **Fast stream 无样式**：大文件路径输出 minimal OOXML，不支持 `StyleBuilder`。`width`/`freezeRows` 等在 stream 下仅 warn 后丢弃。
 - **并发安全**：Worker 通信用 requestId 路由 + `pending: Map`，`onmessage` 只注册一次。
 
 ## License

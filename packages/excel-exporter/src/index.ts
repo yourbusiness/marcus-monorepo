@@ -23,7 +23,7 @@ export { exportAsStream } from "./streaming-builder";
 const XLSX_MIME =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const STREAM_THRESHOLD = 50_000; // Workbook.toBuffer cliff starts ~55k rows
-const WORKER_THRESHOLD = 500; // main-mode sync work is acceptable only below this
+const WORKER_THRESHOLD = 20_000; // main-mode sync work is acceptable below this
 
 type PickedMode = { mode: ExportMode; workerMode?: "workbook" | "stream" };
 
@@ -94,12 +94,12 @@ export async function exportExcel(
   const start = performance.now();
   const totalRows = options.sheets.reduce((s, sh) => s + sh.data.length, 0);
 
+  const picked = pickMode(options, totalRows);
+  const needsWasm = picked.workerMode !== "stream";
   const loader = getWasmLoader();
-  if (!loader.supported) {
+  if (needsWasm && !loader.supported) {
     return exportWithSheetJS(options, start, "WebAssembly not supported");
   }
-
-  const picked = pickMode(options, totalRows);
 
   // Node main/stream: execute directly on this thread (no Web Worker available).
   if (
@@ -107,9 +107,15 @@ export async function exportExcel(
     (picked.mode === "stream" && typeof window === "undefined")
   ) {
     try {
-      const initStart = performance.now();
-      await loader.ensureLoaded();
-      options.onPhase?.("init", performance.now() - initStart);
+      if (needsWasm) {
+        const initStart = performance.now();
+        await loader.ensureLoaded();
+        options.onPhase?.("init", performance.now() - initStart);
+      } else {
+        // Fast stream does not use WASM; report an empty init phase so the
+        // public phase sequence remains stable across main/stream routes.
+        options.onPhase?.("init", 0);
+      }
       options.onProgress?.(0);
       let result: ExportResult;
       const buildStart = performance.now();

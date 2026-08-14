@@ -83,8 +83,9 @@ function getOrCreateWorker(): Worker {
 
 /** Strip function-form format before structured clone (functions cannot be cloned). */
 function stripFunctionFormats(options: ExportOptions): ExportOptions {
+  const { onProgress: _onProgress, onPhase: _onPhase, ...rest } = options;
   return {
-    ...options,
+    ...rest,
     sheets: options.sheets.map((s) => ({
       ...s,
       columns: s.columns.map((c) => {

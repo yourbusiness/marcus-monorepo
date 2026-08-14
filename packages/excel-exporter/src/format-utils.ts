@@ -9,6 +9,7 @@ export const DEFAULT_DATETIME_PATTERN = "yyyy-MM-dd HH:mm";
 export function toStr(value: unknown): string {
   if (value == null) return "";
   if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
   if (
     typeof value === "number" ||
     typeof value === "boolean" ||

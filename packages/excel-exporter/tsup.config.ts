@@ -1,4 +1,4 @@
-import { defineConfig } from 'tsup';
+import { defineConfig } from "tsup";
 
 // Two configs:
 //  - Main entrypoints are external on modern-xlsx (consumer bundler resolves the peerDep).
@@ -8,30 +8,31 @@ import { defineConfig } from 'tsup';
 export default defineConfig([
   {
     entry: {
-      index: 'src/index.ts',
-      'style-presets': 'src/style-presets.ts',
-      'worker-utils': 'src/worker-exporter.ts',
+      index: "src/index.ts",
+      "style-presets": "src/style-presets.ts",
+      "worker-utils": "src/worker-exporter.ts",
     },
-    format: ['esm'],
+    format: ["esm"],
     dts: true,
     splitting: true,
     treeshake: true,
     clean: true,
     sourcemap: true,
-    target: 'es2022',
-    external: ['modern-xlsx', 'xlsx'],
+    target: "es2022",
+    external: ["modern-xlsx", "xlsx", "fflate"],
   },
   {
-    entry: { 'export.worker': 'src/workers/export.worker.ts' },
-    format: ['esm'],
+    entry: { "export.worker": "src/workers/export.worker.ts" },
+    format: ["esm"],
     dts: false,
     treeshake: true,
     sourcemap: true,
-    target: 'es2022',
+    target: "es2022",
+    platform: "browser",
     // Force modern-xlsx to be bundled into the worker (not left external).
     // xlsx is only used in the main-thread fallback path, never in the worker.
-    noExternal: ['modern-xlsx'],
-    external: ['xlsx'],
+    noExternal: ["modern-xlsx", "fflate"],
+    external: ["xlsx"],
     clean: false,
   },
 ]);

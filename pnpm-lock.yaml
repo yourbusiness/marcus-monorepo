@@ -85,6 +85,10 @@ importers:
         version: 1.6.4(@algolia/client-search@5.56.0)(@types/node@22.20.1)(lightningcss@1.33.0)(postcss@8.5.23)(search-insights@2.17.3)(typescript@5.9.3)
 
   packages/excel-exporter:
+    dependencies:
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
     devDependencies:
       modern-xlsx:
         specifier: 1.2.0
@@ -3523,6 +3527,12 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution:
+      {
+        integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==,
+      }
 
   file-entry-cache@8.0.0:
     resolution:
@@ -7955,6 +7965,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.5):
     optionalDependencies:
       picomatch: 4.0.5
+
+  fflate@0.8.3: {}
 
   file-entry-cache@8.0.0:
     dependencies:
