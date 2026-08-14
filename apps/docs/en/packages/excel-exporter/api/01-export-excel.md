@@ -48,6 +48,8 @@ configureWasm(options: LoaderOptions): void
 
 - `WorkbookBuilder.create()` + `addSheet(config)` + `toBuffer()`: batch build with full styling;
 - `exportAsStream(sheets, onProgress?)`: lower-level streaming, returns `{ bytes, rowCount }`;
+- `exportTable(options)`: convenience for common table data; accepts AntD `title`/`dataIndex` and Element Plus `label`/`prop`;
+- `exportEcharts(options)`: convenience for common ECharts data; supports category-axis series, pie `name/value`, and scatter `[x,y]`;
 - `getWasmLoader()`: access the global WASM loader (state: idle / loading / ready / error).
 
 ```ts
@@ -56,6 +58,8 @@ import {
   configureWasm,
   WorkbookBuilder,
   exportAsStream,
+  exportTable,
+  exportEcharts,
   getWasmLoader,
 } from "@marcusok/excel-exporter";
 ```

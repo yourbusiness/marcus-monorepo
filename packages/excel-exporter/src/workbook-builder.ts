@@ -62,10 +62,21 @@ export class WorkbookBuilder {
       if (c.width !== undefined) ws.setColumnWidth(i + 1, c.width);
     });
 
-    // Column styles: apply to data cells only (header stays unstyled, matching
-    // the `style: not the header` contract in types.ts). ws.rows[0] is the
-    // header row, so slice(1) iterates only data rows; mutating styleIndex is
-    // a plain JS property write, bypassing ws.cell(ref) ref-parsing overhead.
+    // Header styles. Column-level headerStyle wins over the sheet-level default.
+    config.columns.forEach((c, i) => {
+      const headerStyle = c.headerStyle ?? config.headerStyle;
+      if (headerStyle) {
+        const idx = buildStyleIndex(this.wb, headerStyle);
+        const cell = ws.rows[0]?.cells[i];
+        if (cell) cell.styleIndex = idx;
+      }
+    });
+
+    // Column styles: apply to data cells only, matching the `style: not the
+    // header` contract in types.ts. Header styling is handled separately above
+    // via headerStyle. ws.rows[0] is the header row, so slice(1) iterates only
+    // data rows; mutating styleIndex is a plain JS property write, bypassing
+    // ws.cell(ref) ref-parsing overhead.
     config.columns.forEach((c, i) => {
       if (c.style) {
         const idx = buildStyleIndex(this.wb, c.style);

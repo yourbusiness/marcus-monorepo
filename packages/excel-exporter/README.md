@@ -149,14 +149,17 @@ WASM 不支持或加载失败时自动降级 SheetJS（[`src/fallback.ts`](./src
 - `onPhase(phase, durationMs)`（`exportExcel` 选项）— 阶段耗时回调：`init`（WASM 初始化）/ `build`（工作簿构建）/ `download`（触发下载），每阶段完成时上报一次毫秒数，供指标面板做阶段分解；不影响返回结果里的 `duration`。
 - `WorkbookBuilder` — 批量构建器（<5 万行，完整样式）。
 - `exportAsStream(sheets)` — 流式导出（>=5 万行）。
+- `exportTable(options)` — 常见表格数据便捷导出，支持 AntD `title`/`dataIndex` 与 Element Plus `label`/`prop` 命名。
+- `exportEcharts(options)` — 常见 ECharts 数据便捷导出，支持类目轴多系列、饼图 `name/value`、散点 `[x,y]`。
 - `StylePresets` — 七种预设样式。
+- `headerStyle` — `SheetConfig` 与 `ColumnConfig` 均支持，用于设置表头单元格样式。
 - `exportInWorker` / `terminateWorker`（`@marcusok/excel-exporter/worker-utils`，源码入口 `src/worker-exporter.ts`） — 手动 Worker 生命周期控制。
 
 ## Node 用法
 
 Node 无 Web Worker，auto 路由退化为 main（<5 万行）或 stream（>=5 万行）在主线程执行。
 
-以下代码仅在测试环境需要（`exportExcel()` 在生产代码中会自动加载 WASM，无需手动调用）。Node 的 `fetch` 拒绝 `file://` 协议，vitest 等测试框架需通过 `initWasmSync` 同步加载：
+Node 的 `fetch` 拒绝 `file://` 协议，因此 **Node 直连本地包时不能仅依赖 `exportExcel()` 自动加载 WASM**。生产服务端需要先显式初始化 WASM（`initWasmSync`），或通过 `configureWasm({ wasmUrl })` 提供一个可 fetch 的 HTTP URL：
 
 ```ts
 import { readFileSync } from "node:fs";

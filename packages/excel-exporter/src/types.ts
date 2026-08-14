@@ -57,6 +57,8 @@ export interface ColumnConfig {
   width?: number;
   /** Style applied to all data cells in this column (not the header). */
   style?: CellStyle;
+  /** Style applied to this column's header cell. Takes precedence over SheetConfig.headerStyle. */
+  headerStyle?: CellStyle;
   /**
    * Value formatter: FormatSpec (worker-compatible) or function (main/Node only).
    *
@@ -88,6 +90,8 @@ export interface SheetConfig {
   name: string; // 1-31 chars, ECMA-376 validation
   columns: ColumnConfig[];
   data: Record<string, unknown>[];
+  /** Style applied to every header cell, unless overridden by ColumnConfig.headerStyle. */
+  headerStyle?: CellStyle;
   /** Number of header rows to freeze (usually 1). Maps to ws.frozenPane = { rows, cols: 0 }. */
   freezeRows?: number;
   /** Merged cell ranges. */

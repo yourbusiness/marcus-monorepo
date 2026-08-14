@@ -1,6 +1,6 @@
 # Node / SSR Usage
 
-In Node servers (including SSR) no wasm/worker assets or `configureWasm` are needed — just call the API.
+In Node servers (including SSR) you don't need browser assets, but local filesystem runtimes must initialize WASM first; otherwise the library falls back to SheetJS.
 
 ## Environment differences
 
@@ -15,7 +15,17 @@ In Node servers (including SSR) no wasm/worker assets or `configureWasm` are nee
 
 ```ts
 import { exportExcel } from "@marcusok/excel-exporter";
+import { initWasmSync } from "modern-xlsx";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { writeFile } from "node:fs/promises";
+
+const require = createRequire(import.meta.url);
+initWasmSync(
+  readFileSync(
+    `${require("node:path").dirname(require.resolve("modern-xlsx"))}/modern-xlsx.wasm`,
+  ),
+);
 
 const result = await exportExcel({
   filename: "server-report",

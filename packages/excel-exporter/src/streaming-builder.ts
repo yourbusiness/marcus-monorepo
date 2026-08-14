@@ -43,6 +43,11 @@ export async function exportAsStream(
     const skipped: string[] = [];
     if (config.columns.some((c) => c.width !== undefined))
       skipped.push("width");
+    if (
+      config.headerStyle !== undefined ||
+      config.columns.some((c) => c.headerStyle !== undefined)
+    )
+      skipped.push("headerStyle");
     if (config.freezeRows) skipped.push("freezeRows");
     if (config.autoFilter) skipped.push("autoFilter");
     if (config.merges?.length) skipped.push("merges");
@@ -52,16 +57,27 @@ export async function exportAsStream(
           skipped.join(", ") +
           ")",
       );
+    const reusableCells: StreamingCellInput[] = config.columns.map(() => ({
+      value: "",
+      cellType: "sharedString",
+    }));
     for (const item of config.data) {
-      const cells: StreamingCellInput[] = config.columns.map((col) => {
+      for (let colIndex = 0; colIndex < config.columns.length; colIndex++) {
+        const col = config.columns[colIndex];
+        const cell = reusableCells[colIndex];
         const v = displayValue(col, item);
-        if (typeof v === "number")
-          return { value: String(v), cellType: "number" };
-        if (typeof v === "boolean")
-          return { value: v ? "1" : "0", cellType: "boolean" };
-        return { value: v, cellType: "sharedString" };
-      });
-      writer.writeRow(cells);
+        if (typeof v === "number") {
+          cell.value = String(v);
+          cell.cellType = "number";
+        } else if (typeof v === "boolean") {
+          cell.value = v ? "1" : "0";
+          cell.cellType = "boolean";
+        } else {
+          cell.value = v;
+          cell.cellType = "sharedString";
+        }
+      }
+      writer.writeRow(reusableCells);
       totalRows++;
       if (onProgress && totalRows % 1000 === 0)
         onProgress(totalRows / totalExpected);

@@ -1,6 +1,6 @@
 # Node / SSR 使用
 
-Node 服务端（含 SSR）无需部署 wasm/worker 静态资源，无需 `configureWasm`，直接调用。
+Node 服务端（含 SSR）无需部署浏览器静态资源，但本地文件系统运行时需要先初始化 WASM；否则会降级到 SheetJS。
 
 ## 环境差异
 
@@ -15,7 +15,17 @@ Node 服务端（含 SSR）无需部署 wasm/worker 静态资源，无需 `confi
 
 ```ts
 import { exportExcel } from "@marcusok/excel-exporter";
+import { initWasmSync } from "modern-xlsx";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { writeFile } from "node:fs/promises";
+
+const require = createRequire(import.meta.url);
+initWasmSync(
+  readFileSync(
+    `${require("node:path").dirname(require.resolve("modern-xlsx"))}/modern-xlsx.wasm`,
+  ),
+);
 
 const result = await exportExcel({
   filename: "server-report",

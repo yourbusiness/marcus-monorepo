@@ -48,6 +48,8 @@ configureWasm(options: LoaderOptions): void
 
 - `WorkbookBuilder.create()` + `addSheet(config)` + `toBuffer()`：批量化构建，完整样式；
 - `exportAsStream(sheets, onProgress?)`：底层流式导出，返回 `{ bytes, rowCount }`；
+- `exportTable(options)`：常见表格数据便捷导出，支持 AntD `title`/`dataIndex` 与 Element Plus `label`/`prop`；
+- `exportEcharts(options)`：常见 ECharts 数据便捷导出，支持类目轴多系列、饼图 `name/value`、散点 `[x,y]`；
 - `getWasmLoader()`：访问全局 WASM 加载器（状态：idle / loading / ready / error）。
 
 ```ts
@@ -56,6 +58,8 @@ import {
   configureWasm,
   WorkbookBuilder,
   exportAsStream,
+  exportTable,
+  exportEcharts,
   getWasmLoader,
 } from "@marcusok/excel-exporter";
 ```

@@ -5,10 +5,17 @@ import { exportInWorker } from "./worker-exporter";
 import { exportWithSheetJS } from "./fallback";
 import { triggerDownload, toBlobPart } from "./download";
 import { getWasmLoader } from "./wasm-loader";
+import { tableExportToOptions, type TableExportOptions } from "./table-export";
+import {
+  echartsExportToOptions,
+  type EChartsExportOptions,
+} from "./echarts-export";
 
 export * from "./types";
 export * from "./style-presets";
 export * from "./format-utils";
+export * from "./table-export";
+export * from "./echarts-export";
 export { configureWasm, getWasmLoader } from "./wasm-loader";
 export { WorkbookBuilder } from "./workbook-builder";
 export { exportAsStream } from "./streaming-builder";
@@ -173,4 +180,30 @@ export async function exportExcel(
   } catch (e) {
     return exportWithSheetJS(options, start, (e as Error).message);
   }
+}
+
+/**
+ * Convenience wrapper for common table data shapes.
+ *
+ * Accepts Ant Design-style (`title` / `dataIndex`) and Element Plus-style
+ * (`label` / `prop`) column descriptors, normalizes them to `SheetConfig`,
+ * and delegates to {@link exportExcel}.
+ */
+export async function exportTable(
+  options: TableExportOptions,
+): Promise<ExportResult> {
+  return exportExcel(tableExportToOptions(options));
+}
+
+/**
+ * Convenience wrapper for a small, explicit subset of ECharts options.
+ *
+ * Supports category-axis series data, pie-like name/value data, and
+ * scatter-like coordinate pairs. Unsupported `dataset` mode throws instead of
+ * guessing.
+ */
+export async function exportEcharts(
+  options: EChartsExportOptions,
+): Promise<ExportResult> {
+  return exportExcel(echartsExportToOptions(options));
 }

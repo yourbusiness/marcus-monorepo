@@ -4,9 +4,9 @@ pnpm + Turborepo 前端基建 monorepo，为多个后台应用提供统一的公
 
 ## 当前包
 
-| 包                                                      | 说明                                                           |
-| ------------------------------------------------------- | -------------------------------------------------------------- |
-| [`@marcusok/excel-exporter`](./packages/excel-exporter) | Excel 导出核心库（WASM 驱动、带样式、流式写入、Worker 多线程） |
+| 包                                                      | 说明                                                                                   |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| [`@marcusok/excel-exporter`](./packages/excel-exporter) | Excel 导出核心库（WASM 驱动、带样式、流式写入、Worker 多线程、table/ECharts 便捷适配） |
 
 ## 快速开始
 
@@ -40,7 +40,7 @@ pnpm typecheck   # TypeScript 类型检查
 marcus-monorepo/
 ├── packages/                   # 共享包（水平扩展）
 │   └── excel-exporter/         # 当前：Excel 导出
-│       ├── src/                # 19 个 .ts 文件（12 个源文件 + 7 个测试文件）
+│       ├── src/                # 23 个 .ts 文件（14 个源文件 + 9 个测试文件）
 │       └── dist/               # tsup 构建产物
 ├── docs/                       # 设计文档
 │   └── excel-export-design.md  # Excel 导出核心设计文档（13 万字符）

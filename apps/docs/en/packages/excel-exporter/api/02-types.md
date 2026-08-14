@@ -2,24 +2,26 @@
 
 ## SheetConfig
 
-| Field         | Type                        | Required | Description                              |
-| ------------- | --------------------------- | -------- | ---------------------------------------- |
-| `name`        | `string`                    | ✅       | ≤ 31 chars, no `: \ / ? * [ ]`           |
-| `columns`     | `ColumnConfig[]`            | ✅       | Column definitions                       |
-| `data`        | `Record<string, unknown>[]` | ✅       | Row data                                 |
-| `freezeRows?` | `number`                    | —        | Freeze the first N header rows           |
-| `merges?`     | `MergeRange[]`              | —        | Merged cells (relative to the data area) |
-| `autoFilter?` | `boolean`                   | —        | Header auto filter                       |
+| Field          | Type                        | Required | Description                                                    |
+| -------------- | --------------------------- | -------- | -------------------------------------------------------------- |
+| `name`         | `string`                    | ✅       | ≤ 31 chars, no `: \ / ? * [ ]`                                 |
+| `columns`      | `ColumnConfig[]`            | ✅       | Column definitions                                             |
+| `data`         | `Record<string, unknown>[]` | ✅       | Row data                                                       |
+| `headerStyle?` | `CellStyle`                 | —        | Default header style; overridden by column-level `headerStyle` |
+| `freezeRows?`  | `number`                    | —        | Freeze the first N header rows                                 |
+| `merges?`      | `MergeRange[]`              | —        | Merged cells (relative to the data area)                       |
+| `autoFilter?`  | `boolean`                   | —        | Header auto filter                                             |
 
 ## ColumnConfig
 
-| Field     | Type                     | Required | Description                                       |
-| --------- | ------------------------ | -------- | ------------------------------------------------- |
-| `key`     | `string`                 | ✅       | Field name on the data row                        |
-| `header`  | `string`                 | ✅       | Header text                                       |
-| `width?`  | `number`                 | —        | Column width (Excel character units)              |
-| `style?`  | `CellStyle`              | —        | Data-cell style (headers excluded)                |
-| `format?` | `FormatSpec \| Function` | —        | Value formatting; function form is main-path only |
+| Field          | Type                     | Required | Description                                                       |
+| -------------- | ------------------------ | -------- | ----------------------------------------------------------------- |
+| `key`          | `string`                 | ✅       | Field name on the data row                                        |
+| `header`       | `string`                 | ✅       | Header text                                                       |
+| `width?`       | `number`                 | —        | Column width (Excel character units)                              |
+| `style?`       | `CellStyle`              | —        | Data-cell style (headers excluded)                                |
+| `headerStyle?` | `CellStyle`              | —        | Header style for this column; wins over sheet-level `headerStyle` |
+| `format?`      | `FormatSpec \| Function` | —        | Value formatting; function form is main-path only                 |
 
 ## MergeRange
 
