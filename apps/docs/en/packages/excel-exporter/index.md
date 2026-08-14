@@ -4,16 +4,16 @@ A high-performance Excel export engine built on [modern-xlsx](https://github.com
 
 ## Capabilities
 
-| Capability                 | Description                                                                |
-| -------------------------- | -------------------------------------------------------------------------- |
-| Declarative API            | Describe exports with `sheets + columns + data`; no cell-level coding      |
-| Auto mode routing          | `auto` picks main / worker / stream by row count (500 / 50,000 thresholds) |
-| Full cell styling          | Font, fill, alignment, borders, number formats; 7 built-in `StylePresets`  |
-| Value formatting           | Structured `FormatSpec` (enum / date / datetime / number / padding)        |
-| Worker threading           | Main thread only does one structured clone; WASM runs in a Worker          |
-| Streaming writes           | `StreamingXlsxWriter` with constant memory, ~1.5s at 100k rows             |
-| Layered fallback           | Auto-degrades to SheetJS (styles stripped) when WASM is unavailable        |
-| Progress / phase callbacks | `onProgress`, `onPhase` for visualizations and telemetry                   |
+| Capability                 | Description                                                                        |
+| -------------------------- | ---------------------------------------------------------------------------------- |
+| Declarative API            | Describe exports with `sheets + columns + data`; no cell-level coding              |
+| Auto mode routing          | `auto` picks main / worker / Fast stream by row count (20,000 / 50,000 thresholds) |
+| Full cell styling          | Font, fill, alignment, borders, number formats; 7 built-in `StylePresets`          |
+| Value formatting           | Structured `FormatSpec` (enum / date / datetime / number / padding)                |
+| Worker threading           | Main thread only does one structured clone; WASM runs in a Worker                  |
+| Streaming writes           | Custom `fast-xlsx.ts` + `fflate`, ~0.8s at 100k rows                               |
+| Layered fallback           | Auto-degrades to SheetJS (styles stripped) when WASM is unavailable                |
+| Progress / phase callbacks | `onProgress`, `onPhase` for visualizations and telemetry                           |
 
 ## Install
 

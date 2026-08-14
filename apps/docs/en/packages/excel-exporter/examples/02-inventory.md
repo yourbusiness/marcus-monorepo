@@ -67,4 +67,4 @@ const result = await exportExcel({
 - The custom `lowStock` style (bold red + light red fill) makes risk items obvious;
 - Column-level `style` applies to the whole data column — a good fit for status columns;
 - `merges` are positioned relative to the data area;
-- Small data (< 500 rows) stays on the styled `main` path with default `auto`.
+- Small data (< 20,000 rows) stays on the styled `main` path with default `auto`.

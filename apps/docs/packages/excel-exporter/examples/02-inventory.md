@@ -34,7 +34,7 @@ const result = await exportExcel({
           header: "库存",
           width: 10,
           format: { type: "number", thousands: true },
-          // 函数式 format：低库存标红（仅 main 路径，数据量 < 500 行）
+          // 函数式 format：低库存标红（仅 main 路径，数据量 < 20,000 行）
           style: lowStock,
         },
         { key: "safetyStock", header: "安全库存", width: 12 },
@@ -68,4 +68,4 @@ const result = await exportExcel({
 - `lowStock` 自定义样式：红色加粗 + 浅红填充，一眼识别风险项；
 - 列级 `style` 作用于整列数据单元格，适合状态类列；
 - 合并单元格 `merges` 相对数据区定位，适合把同组首行跨列展示；
-- 数据量小（< 500 行）时保持默认 `auto` 即可走带完整样式的 main 路径。
+- 数据量小（< 20,000 行）时保持默认 `auto` 即可走带完整样式的 main 路径。

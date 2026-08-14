@@ -26,7 +26,7 @@ hero:
 
 ## Performance Snapshot
 
-The Rust + WASM streaming writer keeps constant memory and ~1.5s latency at 100k rows, while the batch serialization path hits a performance cliff.
+Fast stream completes a 100k-row export in ~0.8s, while the batch serialization path hits a performance cliff.
 
 <ClientOnly>
   <BenchmarkChart />

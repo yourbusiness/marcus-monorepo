@@ -11,6 +11,6 @@ The panel below runs `@marcusok/excel-exporter` directly in your browser: pick a
 - **auto (recommended)**: picks the optimal main / worker / stream path by row count;
 - **main**: synchronous main-thread build — notice the cliff at 100k rows;
 - **worker**: Web Worker threading; the main thread only does one structured clone;
-- **stream**: constant-memory streaming, ~1.5s at 100k rows, but no styles or layout features.
+- **stream**: Fast stream, ~0.8s at 100k rows, but no styles or layout features.
 
 Data comes from the docs site's deterministic mock generator (mulberry32 seeded PRNG), so repeated runs with the same settings produce identical output. Full usage docs: [excel-exporter](/en/packages/excel-exporter/).

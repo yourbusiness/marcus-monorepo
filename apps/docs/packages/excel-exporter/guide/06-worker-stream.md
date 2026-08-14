@@ -1,8 +1,8 @@
 # Worker 与流式
 
-## Worker 多线程（≥ 500 行）
+## Worker 多线程（≥ 20,000 行）
 
-浏览器中数据量 ≥ 500 行时，`auto` 会选择 Worker 路径：主线程只做一次结构化克隆（10 万行约 94ms），WASM 加载与构建全部在 Worker 内执行，页面不卡顿。
+浏览器中数据量 ≥ 20,000 行时，`auto` 会选择 Worker 路径：主线程只做一次结构化克隆（10 万行约 94ms），WASM 加载与构建全部在 Worker 内执行，页面不卡顿。
 
 ```ts
 configureWasm({ workerUrl: "/assets/export.worker.js" });
@@ -17,7 +17,7 @@ Worker 路径行为：
 
 ## 流式写入（≥ 50,000 行）
 
-`StreamingXlsxWriter` 以流式写行，恒定内存，10 万行约 1.5s（对比 Workbook 路径 17.5s）。`auto` 在 ≥ 5 万行时自动选择它。
+`fast-xlsx.ts` 使用 `fflate` 生成 minimal OOXML，10 万行约 0.8s（对比 Workbook 路径 17.5s）。`auto` 在 ≥ 5 万行时自动选择它。
 
 Stream 路径的已知限制（v1）：
 

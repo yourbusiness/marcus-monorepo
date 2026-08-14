@@ -1,14 +1,14 @@
 # Performance
 
-Numbers below come from independent-process benchmarks in the package design doc (Node v22.22.2, modern-xlsx@1.2.0, 6 mixed-type columns). They explain the auto-routing trade-offs.
+Numbers below come from local measurements (real Chrome + Play's 6 mixed-type columns); Node independent-process regression lives in `src/__tests__/performance.test.ts`.
 
 ## Benchmarks
 
-| Rows    | Workbook (main) | Stream      | What `auto` picks |
-| ------- | --------------- | ----------- | ----------------- |
-| 10,000  | 109ms           | 184ms       | Worker + Workbook |
-| 50,000  | 618ms           | 824ms       | Worker + Stream   |
-| 100,000 | **17,541ms**    | **1,548ms** | Worker + Stream   |
+| Rows    | Workbook (main) | Fast stream | What `auto` picks    |
+| ------- | --------------- | ----------- | -------------------- |
+| 10,000  | ~120ms          | —           | main + Workbook      |
+| 50,000  | —               | ~400ms      | Worker + Fast stream |
+| 100,000 | 17.5s (legacy)  | ~780ms      | Worker + Fast stream |
 
 <ClientOnly>
   <BenchmarkChart dir="excel-exporter" />
@@ -16,8 +16,8 @@ Numbers below come from independent-process benchmarks in the package design doc
 
 ## Takeaways
 
-1. `Workbook.toBuffer()` shows a superlinear cliff beyond ~55k rows (17.5s at 100k), while `StreamingXlsxWriter` stays at ~1.5s — hence `STREAM_THRESHOLD = 50_000`;
-2. In the browser, ≥ 500 rows run in a Worker; the main thread only does one structured clone (~94ms at 100k rows);
+1. `Workbook.toBuffer()` shows a superlinear cliff beyond ~55k rows (17.5s at 100k), while Fast stream stays at ~0.8s — hence `STREAM_THRESHOLD = 50_000`;
+2. In the browser, ≥ 20,000 rows run in a Worker; the main thread only does one structured clone (~94ms at 100k rows);
 3. Stream's cost is missing styles/layout (v1), so small files keep the fully-styled Workbook path.
 
 ## Optimization tips

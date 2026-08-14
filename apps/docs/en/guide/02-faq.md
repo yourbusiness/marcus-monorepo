@@ -14,7 +14,7 @@ configureWasm({
 });
 ```
 
-Only the browser `worker` / `auto` path (≥ 500 rows) needs it.
+Only the browser `worker` / `auto` path (≥ 20,000 rows) needs it.
 
 ### `result.engine` is "sheetjs"
 

@@ -1,8 +1,8 @@
 # Worker & Streaming
 
-## Worker threading (≥ 500 rows)
+## Worker threading (≥ 20,000 rows)
 
-At ≥ 500 rows in the browser, `auto` selects the Worker path: the main thread only does one structured clone (~94ms at 100k rows), while WASM loading and building happen inside the Worker.
+At ≥ 20,000 rows in the browser, `auto` selects the Worker path: the main thread only does one structured clone (~94ms at 100k rows), while WASM loading and building happen inside the Worker.
 
 ```ts
 configureWasm({ workerUrl: "/assets/export.worker.js" });
@@ -17,7 +17,7 @@ Worker path behavior:
 
 ## Streaming writes (≥ 50,000 rows)
 
-`StreamingXlsxWriter` writes rows incrementally with constant memory: ~1.5s at 100k rows (vs 17.5s on the Workbook path). `auto` selects it at ≥ 50k rows.
+`fast-xlsx.ts` uses `fflate` to produce minimal OOXML: ~0.8s at 100k rows (vs 17.5s on the Workbook path). `auto` selects it at ≥ 50k rows.
 
 Known stream limitations (v1):
 

@@ -56,7 +56,7 @@ columns: [
 }
 ```
 
-函数签名：`(value: unknown, row: Record<string, unknown>) => string | number | boolean`。使用函数形式的列，导出路径会被限制为 `main`（浏览器 < 500 行 / Node），或需要改为 FormatSpec。
+函数签名：`(value: unknown, row: Record<string, unknown>) => string | number | boolean`。使用函数形式的列，导出路径会被限制为 `main`（浏览器 < 20,000 行 / Node），或需要改为 FormatSpec。
 
 ## 跨模式精度注意事项
 

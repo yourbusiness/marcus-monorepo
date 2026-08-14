@@ -1,14 +1,14 @@
 # 性能参考
 
-以下数字来自仓库设计文档的独立进程实测（Node v22.22.2、modern-xlsx@1.2.0、6 列混合类型），用来说明自动路由的取舍依据。
+以下数字为本机实测（真实 Chrome + Play 同款 6 列混合类型），用来说明自动路由的取舍依据；Node 独立进程回归见 `src/__tests__/performance.test.ts`。
 
 ## 基准数据
 
-| 数据量     | Workbook（main） | Stream      | auto 实际选择     |
-| ---------- | ---------------- | ----------- | ----------------- |
-| 10,000 行  | 109ms            | 184ms       | Worker + Workbook |
-| 50,000 行  | 618ms            | 824ms       | Worker + Stream   |
-| 100,000 行 | **17,541ms**     | **1,548ms** | Worker + Stream   |
+| 数据量     | Workbook（main）  | Fast stream | auto 实际选择        |
+| ---------- | ----------------- | ----------- | -------------------- |
+| 10,000 行  | ~120ms            | —           | main + Workbook      |
+| 50,000 行  | —                 | ~400ms      | Worker + Fast stream |
+| 100,000 行 | 17.5s（历史基线） | ~780ms      | Worker + Fast stream |
 
 <ClientOnly>
   <BenchmarkChart dir="excel-exporter" />
@@ -16,8 +16,8 @@
 
 ## 结论
 
-1. `Workbook.toBuffer()` 在 ~5.5 万行开始出现超线性断崖（10 万行 17.5s），而 `StreamingXlsxWriter` 恒定 ~1.5s，因此 `STREAM_THRESHOLD = 50_000`；
-2. 浏览器 ≥ 500 行走 Worker 后，主线程只做一次结构化克隆（10 万行约 94ms），页面不卡顿；
+1. `Workbook.toBuffer()` 在 ~5.5 万行开始出现超线性断崖（10 万行 17.5s），而 Fast stream 约 0.8s，因此 `STREAM_THRESHOLD = 50_000`；
+2. 浏览器 ≥ 20,000 行走 Worker 后，主线程只做一次结构化克隆（10 万行约 94ms），页面不卡顿；
 3. Stream 路径的代价是样式/布局特性缺失（v1），所以小文件默认走带完整样式的 Workbook 路径。
 
 ## 优化建议

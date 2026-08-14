@@ -56,7 +56,7 @@ columns: [
 }
 ```
 
-Signature: `(value: unknown, row: Record<string, unknown>) => string | number | boolean`. Columns using function form limit the export to the `main` path (browser < 500 rows / Node); convert to FormatSpec for worker/stream.
+Signature: `(value: unknown, row: Record<string, unknown>) => string | number | boolean`. Columns using function form limit the export to the `main` path (browser < 20,000 rows / Node); convert to FormatSpec for worker/stream.
 
 ## Cross-path precision notes
 

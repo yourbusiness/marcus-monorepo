@@ -9,7 +9,7 @@ In Node servers (including SSR) you don't need browser assets, but local filesys
 | Worker path       | ✅ available         | ❌ no Web Worker; falls back to main/stream |
 | Auto download     | ✅ triggers download | ❌ `triggerDownload` is a no-op             |
 | `download` option | defaults to true     | set `false` explicitly and handle the Blob  |
-| Large data        | worker + Stream      | main → stream at ≥ 50k rows (main thread)   |
+| Large data        | worker + Fast stream | main → stream at ≥ 50k rows (main thread)   |
 
 ## Export and write to disk
 
@@ -66,4 +66,4 @@ export async function GET() {
 
 ## Performance tip
 
-Large server-side exports (≥ 50k rows) automatically take the stream path; without a Worker, the write loop occupies the current thread for ~1.5s. Run it in an async task or queue so request threads stay responsive.
+Large server-side exports (≥ 50k rows) automatically take the stream path; without a Worker, Fast stream occupies the current thread for ~0.8s. Run it in an async task or queue so request threads stay responsive.

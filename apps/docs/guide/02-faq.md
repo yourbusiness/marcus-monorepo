@@ -14,7 +14,7 @@ configureWasm({
 });
 ```
 
-只有浏览器中的 `worker` / `auto`（数据量 ≥ 500 行）路径需要它。
+只有浏览器中的 `worker` / `auto`（数据量 ≥ 20,000 行）路径需要它。
 
 ### 导出结果里 engine 是 "sheetjs"
 

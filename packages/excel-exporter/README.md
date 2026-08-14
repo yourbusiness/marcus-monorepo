@@ -4,15 +4,15 @@
 
 ## 性能参考
 
-Node v22.22.2，4 列混合类型，本机独立进程实测（性能回归见 `src/__tests__/performance.test.ts`）：
+本机实测（真实 Chrome + Play 同款 6 列；Node 独立进程用于回归，见 `src/__tests__/performance.test.ts`）：
 
 | 数据量  | auto 路由   | 实测耗时 | 硬性要求 |
 | ------- | ----------- | -------- | -------- |
-| 1 万行  | Workbook    | ~117ms   | < 200ms  |
-| 5 万行  | Fast stream | ~377ms   | < 500ms  |
-| 10 万行 | Fast stream | ~762ms   | < 1000ms |
+| 1 万行  | Workbook    | ~120ms   | < 200ms  |
+| 5 万行  | Fast stream | ~400ms   | < 500ms  |
+| 10 万行 | Fast stream | ~780ms   | < 1000ms |
 
-> 大文件路径不再依赖 `modern-xlsx` 的 `StreamingXlsxWriter`，而是用 `fflate` 同步压缩一个 minimal OOXML 工作簿。它在 100k×4 列场景下比原 WASM streaming 快约 2 倍，且避开 `Workbook.toBuffer()` 在 5.5 万行后的超线性塌方。
+> 大文件路径不再依赖 `modern-xlsx` 的 `StreamingXlsxWriter`，而是用 `fflate` 同步压缩一个 minimal OOXML 工作簿。它在 100k×6 列 Play 场景下约 0.8s，且避开 `Workbook.toBuffer()` 在 5.5 万行后的超线性塌方。
 
 ## 安装
 

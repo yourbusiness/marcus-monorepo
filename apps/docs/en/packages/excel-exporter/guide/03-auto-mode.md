@@ -6,18 +6,18 @@ The `mode` option defaults to `"auto"`: the library picks the optimal path based
 
 ### Browser
 
-| Rows           | Path                | Notes                                                                                    |
-| -------------- | ------------------- | ---------------------------------------------------------------------------------------- |
-| `< 500`        | `main`              | Synchronous main-thread build; negligible latency                                        |
-| `500 – 49,999` | `worker` + Workbook | Main thread only does one structured clone (~94ms at 100k rows); WASM runs in the Worker |
-| `>= 50,000`    | `worker` + Stream   | Streaming writes avoid the `toBuffer` cliff                                              |
+| Rows              | Path                   | Notes                                                                                    |
+| ----------------- | ---------------------- | ---------------------------------------------------------------------------------------- |
+| `< 20,000`        | `main`                 | Synchronous main-thread build; ~120ms at 10k×6 columns                                   |
+| `20,000 – 49,999` | `worker` + Workbook    | Main thread only does one structured clone (~94ms at 100k rows); WASM runs in the Worker |
+| `>= 50,000`       | `worker` + Fast stream | Custom fflate writes avoid the `toBuffer` cliff                                          |
 
 ### Node / SSR (no Web Worker)
 
 | Rows        | Path     | Notes                                    |
 | ----------- | -------- | ---------------------------------------- |
 | `< 50,000`  | `main`   | Main-thread Workbook build, full styling |
-| `>= 50,000` | `stream` | Streaming writes, constant memory        |
+| `>= 50,000` | `stream` | Fast stream, ~0.8s at 100k rows          |
 
 ## Explicit modes
 
@@ -29,9 +29,9 @@ await exportExcel({ ..., mode: "main" });    // force main thread
 
 `mode: "worker"` does **not** error in Node/SSR: it falls back to the main-thread path (stream above 50k rows), preserving style semantics instead of silently degrading to style-less SheetJS.
 
-## Why 500 / 50,000
+## Why 20,000 / 50,000
 
-- **500 rows**: synchronous main-thread work is acceptable below this level; avoids unnecessary Worker startup;
-- **50,000 rows**: `Workbook.toBuffer()` shows a superlinear cliff beyond ~55k rows (~17.5s at 100k), while `StreamingXlsxWriter` stays at ~1.5s. `STREAM_THRESHOLD = 50_000` keeps a safety margin.
+- **20,000 rows**: synchronous main-thread work is acceptable below this level; avoids unnecessary Worker startup;
+- **50,000 rows**: `Workbook.toBuffer()` shows a superlinear cliff beyond ~55k rows (~17.5s at 100k), while Fast stream stays at ~0.8s. `STREAM_THRESHOLD = 50_000` keeps a safety margin.
 
 > Trade-off: Stream v1 does not support cell styles or layout features (width/freeze/filter/merges). For fully-styled exports stay under 50k rows or split into multiple sheets.
