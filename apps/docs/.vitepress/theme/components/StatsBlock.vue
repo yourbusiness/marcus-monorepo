@@ -56,11 +56,25 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="rootRef" class="stats-grid">
-    <div v-for="s in targets" :key="s.key" class="stat-card">
-      <div class="stat-card__value">
-        {{ display[s.key] ?? "0" }}<span v-if="s.suffix">{{ s.suffix }}</span>
+    <template v-for="s in targets" :key="s.key">
+      <a
+        v-if="s.href"
+        :href="s.href"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="stat-card"
+      >
+        <div class="stat-card__value">
+          {{ display[s.key] ?? "0" }}<span v-if="s.suffix">{{ s.suffix }}</span>
+        </div>
+        <div class="stat-card__label">{{ isEn ? s.en : s.zh }}</div>
+      </a>
+      <div v-else class="stat-card">
+        <div class="stat-card__value">
+          {{ display[s.key] ?? "0" }}<span v-if="s.suffix">{{ s.suffix }}</span>
+        </div>
+        <div class="stat-card__label">{{ isEn ? s.en : s.zh }}</div>
       </div>
-      <div class="stat-card__label">{{ isEn ? s.en : s.zh }}</div>
-    </div>
+    </template>
   </div>
 </template>

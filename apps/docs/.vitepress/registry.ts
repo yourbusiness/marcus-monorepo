@@ -13,6 +13,8 @@ export interface HomeStat {
   zh: string;
   en: string;
   suffix?: string;
+  /** Optional external link; rendered as a clickable stat card. */
+  href?: string;
 }
 
 /** One feature card on the home page highlights section. */
@@ -150,6 +152,8 @@ export function resolvePackageSections(p: PackageEntry): PackageSection[] {
 export function getAllHomeStats(
   pkgs: readonly PackageEntry[] = packages,
 ): HomeStat[] {
+  const primaryPackage = pkgs[0];
+  const npmScope = primaryPackage?.npmName.split("/")[0]?.replace(/^@/, "");
   return [
     {
       key: "packages",
@@ -157,6 +161,12 @@ export function getAllHomeStats(
       decimals: 0,
       zh: "已发布库包",
       en: "Published packages",
+      href:
+        pkgs.length === 1
+          ? `https://www.npmjs.com/package/${primaryPackage?.npmName ?? ""}`
+          : npmScope
+            ? `https://www.npmjs.com/org/${npmScope}`
+            : undefined,
     },
     ...pkgs.flatMap((p) => p.homeStats ?? []),
   ];
