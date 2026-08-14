@@ -62,4 +62,4 @@ await exportExcel({
 - peerDependencies：`modern-xlsx@^1.2.0`（必装）、`xlsx@>=0.18.5`（可选，兜底）
 - 环境：Node >= 22；浏览器需支持 WebAssembly
 
-> 性能数字来自仓库设计文档中的独立进程实测（Node v22.22.2、modern-xlsx@1.2.0），详见 [性能参考](/packages/excel-exporter/guide/07-performance)。
+> 性能数字为本机实测（真实 Chrome + Play 同款 6 列），详见 [性能参考](/packages/excel-exporter/guide/07-performance)。

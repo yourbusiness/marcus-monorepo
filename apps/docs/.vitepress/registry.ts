@@ -202,32 +202,27 @@ export const packages: PackageEntry[] = [
     benchmarks: [
       {
         data: [
-          { label: "10k", values: { main: 109, stream: 184 } },
-          { label: "50k", values: { main: 618, stream: 824 } },
-          { label: "100k", values: { main: 17541, stream: 1548 } },
+          { label: "10k", values: { auto: 120 } },
+          { label: "50k", values: { auto: 400 } },
+          { label: "100k", values: { auto: 780 } },
         ],
         series: [
           {
-            key: "main",
-            label: { zh: "Workbook / main 路径", en: "Workbook / main path" },
-          },
-          {
-            key: "stream",
-            label: { zh: "Stream 路径", en: "Streaming path" },
-            color: "#8b5cf6",
+            key: "auto",
+            label: { zh: "auto 路径", en: "Auto path" },
           },
         ],
         source: {
-          zh: "数据来源：包设计文档，Node v22.22.2、modern-xlsx@1.2.0，独立进程首次实测（毫秒）。",
-          en: "Source: package design doc, Node v22.22.2, modern-xlsx@1.2.0, independent-process first run (ms).",
+          zh: "本机实测：真实 Chrome + Play 同款 6 列，auto 路径（毫秒）。",
+          en: "Measured locally: real Chrome + Play's 6 columns, auto path (ms).",
         },
       },
     ],
     homeStats: [
       {
         key: "rows",
-        value: 1.5,
-        decimals: 1,
+        value: 0.78,
+        decimals: 2,
         zh: "10 万行导出耗时",
         en: "100k rows export time",
         suffix: "s",
@@ -252,8 +247,8 @@ export const packages: PackageEntry[] = [
         icon: "🚀",
         title: { zh: "高性能", en: "High Performance" },
         details: {
-          zh: "Rust + WASM 核心，10 万行导出稳定在 1.5s 级别；Worker 多线程让主线程不被阻塞。",
-          en: "Rust + WASM core exports 100k rows in ~1.5s; Web Workers keep the main thread responsive.",
+          zh: "Fast stream 核心，10 万行导出约 0.8s；Worker 多线程让主线程不被阻塞。",
+          en: "Fast stream core exports 100k rows in ~0.8s; Web Workers keep the main thread responsive.",
         },
       },
       {

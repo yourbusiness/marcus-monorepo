@@ -22,7 +22,7 @@ configureWasm({
 
 ### 10 万行数据导出非常慢（>15s）
 
-大概率走了 `main` + `Workbook.toBuffer()` 路径——该路径在 ~5.5 万行后出现性能断崖。把 `mode` 保持为 `auto`，或显式指定 `mode: "stream"` / `mode: "worker"`。详见 [自动模式路由](/packages/excel-exporter/guide/03-auto-mode)。
+大概率走了 `main` + `Workbook.toBuffer()` 路径——该路径在 ~5.5 万行后出现性能断崖。把 `mode` 保持为 `auto`（10 万行约 0.8s），或显式指定 `mode: "stream"` / `mode: "worker"`。详见 [自动模式路由](/packages/excel-exporter/guide/03-auto-mode)。
 
 ### Stream 模式下样式不生效
 

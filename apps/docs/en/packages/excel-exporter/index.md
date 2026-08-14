@@ -62,4 +62,4 @@ await exportExcel({
 - peerDependencies: `modern-xlsx@^1.2.0` (required), `xlsx@>=0.18.5` (optional, fallback)
 - Environment: Node >= 22; browsers need WebAssembly support
 
-> Performance numbers come from independent-process benchmarks in the package design doc (Node v22.22.2, modern-xlsx@1.2.0). See [Performance](/en/packages/excel-exporter/guide/07-performance).
+> Performance numbers are local measurements (real Chrome + Play's 6 columns). See [Performance](/en/packages/excel-exporter/guide/07-performance).

@@ -34,12 +34,12 @@ Skipped layout features print `[excel-exporter] stream mode: layout features not
 
 ## Which path should I use?
 
-| Need                            | Recommended                                  |
-| ------------------------------- | -------------------------------------------- |
-| ≤ 50k rows with full styling    | `auto` (main / worker + Workbook)            |
-| > 50k rows, styling can degrade | `auto` (worker + Stream), responsive browser |
-| Large batch in Node             | `auto` (main → stream at ≥ 50k)              |
-| Zero main-thread blocking       | explicit `mode: "worker"`                    |
+| Need                            | Recommended                                       |
+| ------------------------------- | ------------------------------------------------- |
+| ≤ 50k rows with full styling    | `auto` (main / worker + Workbook)                 |
+| > 50k rows, styling can degrade | `auto` (worker + Fast stream), responsive browser |
+| Large batch in Node             | `auto` (main → stream at ≥ 50k)                   |
+| Zero main-thread blocking       | explicit `mode: "worker"`                         |
 
 ## Lower-level APIs
 

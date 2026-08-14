@@ -11,6 +11,6 @@
 - **auto（推荐）**：按数据量自动选择 main / worker / stream 最优路径；
 - **main**：主线程同步构建，10 万行时可以看到明显的性能断崖；
 - **worker**：Web Worker 多线程，主线程只做一次结构化克隆；
-- **stream**：流式写入，恒定内存，10 万行约 1.5s，但不支持样式与布局特性。
+- **stream**：Fast stream，10 万行约 0.8s，但不支持样式与布局特性。
 
 数据由文档站的确定性 mock 生成器产生（mulberry32 种子 PRNG），同一配置多次生成结果一致，方便复现。完整用法见 [excel-exporter 文档](/packages/excel-exporter/)。

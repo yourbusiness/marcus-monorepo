@@ -22,7 +22,7 @@ The WASM path failed or is unsupported, so the library degraded to the SheetJS f
 
 ### Exporting 100k rows is very slow (>15s)
 
-You are on the `main` + `Workbook.toBuffer()` path, which has a cliff beyond ~55k rows. Keep `mode: "auto"`, or set `mode: "stream"` / `mode: "worker"` explicitly. See [auto mode](/en/packages/excel-exporter/guide/03-auto-mode).
+You are on the `main` + `Workbook.toBuffer()` path, which has a cliff beyond ~55k rows. Keep `mode: "auto"` (~0.8s at 100k rows), or set `mode: "stream"` / `mode: "worker"` explicitly. See [auto mode](/en/packages/excel-exporter/guide/03-auto-mode).
 
 ### Styles do not apply in stream mode
 

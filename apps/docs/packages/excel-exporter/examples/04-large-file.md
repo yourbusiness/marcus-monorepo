@@ -1,6 +1,6 @@
 # 案例：10 万行大文件导出
 
-大数据量导出是 excel-exporter 的核心优势场景：10 万行保持恒定内存，浏览器端在 Worker 中执行，主线程不卡顿。
+大数据量导出是 excel-exporter 的核心优势场景：10 万行在浏览器 Worker 中执行，主线程不卡顿，Fast stream 约 0.8s 完成。
 
 ## Mock 数据预览
 
@@ -31,7 +31,7 @@ const result = await exportExcel({
   onProgress: (p) => setProgress(p),
 });
 
-console.log(result); // engine: "modern-xlsx", mode: "worker", rowCount: 100000
+console.log(result); // engine: "modern-xlsx", mode: "stream", rowCount: 100000
 ```
 
 ## 要点

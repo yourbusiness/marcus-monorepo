@@ -1,6 +1,6 @@
 # Example: 100k-Row Export
 
-Large exports are the core strength of excel-exporter: constant memory at 100k rows, running in a Worker in the browser so the main thread stays responsive.
+Large exports are the core strength of excel-exporter: 100k rows run in a Worker in the browser so the main thread stays responsive, with Fast stream finishing in ~0.8s.
 
 ## Mock data preview
 
@@ -31,7 +31,7 @@ const result = await exportExcel({
   onProgress: (p) => setProgress(p),
 });
 
-console.log(result); // engine: "modern-xlsx", mode: "worker", rowCount: 100000
+console.log(result); // engine: "modern-xlsx", mode: "stream", rowCount: 100000
 ```
 
 ## Notes
