@@ -1,5 +1,11 @@
 # @marcusok/excel-exporter
 
+## 1.0.0
+
+### Major Changes
+
+- 4ad5ee1: update docs & finish beta
+
 ## 0.4.0
 
 ### Minor Changes
