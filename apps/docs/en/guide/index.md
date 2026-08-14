@@ -4,9 +4,9 @@
 
 ## Current packages
 
-| Package                                                    | Status | Description                                                                                          |
-| ---------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
-| [`@marcusok/excel-exporter`](/en/packages/excel-exporter/) | stable | Excel export engine: WASM-driven, full styling, Worker threading, streaming writes, SheetJS fallback |
+| Package                                                    | Status | Description                                                                                                   |
+| ---------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| [`@marcusok/excel-exporter`](/en/packages/excel-exporter/) | stable | Excel export engine: modern-xlsx + Fast stream, full styling, Worker threading, fast writes, SheetJS fallback |
 
 ## Engineering conventions
 

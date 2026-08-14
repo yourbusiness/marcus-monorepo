@@ -1,6 +1,6 @@
 # @marcusok/excel-exporter · 高性能 Excel 导出引擎
 
-基于 [modern-xlsx](https://github.com/ABCrimson/modern-xlsx)（Rust + WASM）构建的高性能 Excel 导出库。提供声明式 API、自动模式路由、完整单元格样式、Web Worker 多线程、流式写入以及 SheetJS 降级保底。
+基于 [modern-xlsx](https://github.com/ABCrimson/modern-xlsx)（WASM）与自研 Fast stream 构建的高性能 Excel 导出库。提供声明式 API、自动模式路由、完整单元格样式、Web Worker 多线程、快速写入以及 SheetJS 降级保底。
 
 ## 性能参考
 

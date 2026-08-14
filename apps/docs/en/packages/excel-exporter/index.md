@@ -1,6 +1,6 @@
 # @marcusok/excel-exporter
 
-A high-performance Excel export engine built on [modern-xlsx](https://github.com/ABCrimson/modern-xlsx) (Rust + WASM): declarative API, auto mode routing, full cell styling, Web Worker threading, streaming writes and a SheetJS fallback.
+A high-performance Excel export engine built on [modern-xlsx](https://github.com/ABCrimson/modern-xlsx) (WASM) plus a custom Fast stream writer: declarative API, auto mode routing, full cell styling, Web Worker threading, fast large-file writes and a SheetJS fallback.
 
 ## Capabilities
 

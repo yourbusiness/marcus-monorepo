@@ -4,7 +4,7 @@ layout: home
 hero:
   name: "MarcusOK"
   text: "高性能前端库集合"
-  tagline: 面向后台业务的声明式、高性能、可组合的 TypeScript 库。当前核心是 Rust + WASM 驱动的 Excel 导出引擎。
+  tagline: 面向后台业务的声明式、高性能、可组合的 TypeScript 库。当前核心是 modern-xlsx 与自研 Fast stream 组成的 Excel 导出引擎。
   actions:
     - theme: brand
       text: 快速开始

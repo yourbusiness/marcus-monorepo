@@ -4,7 +4,7 @@ layout: home
 hero:
   name: "MarcusOK"
   text: "High-performance frontend libraries"
-  tagline: Declarative, high-performance, composable TypeScript libraries for admin products. The flagship package is a Rust + WASM powered Excel export engine.
+  tagline: Declarative, high-performance, composable TypeScript libraries for admin products. The flagship package is an Excel export engine powered by modern-xlsx and a custom Fast stream writer.
   actions:
     - theme: brand
       text: Get Started
