@@ -1,5 +1,11 @@
 # @marcusok/excel-exporter
 
+## 0.3.1
+
+### Patch Changes
+
+- fee37db: 添加下载模式
+
 ## 0.3.0
 
 ### Minor Changes
