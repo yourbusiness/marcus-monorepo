@@ -216,10 +216,11 @@
   text-align: center;
   background: var(--vp-c-bg-soft);
   color: inherit;
-  text-decoration: none;
+  text-decoration: none !important;
 }
 
 .stat-card:hover {
+  text-decoration: none !important;
   cursor: pointer;
 }
 
