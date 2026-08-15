@@ -1,6 +1,6 @@
 {
   "name": "@marcusok/excel-exporter",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "description": "High-performance Excel export engine built on modern-xlsx (Rust + WASM).",
   "license": "MIT",
