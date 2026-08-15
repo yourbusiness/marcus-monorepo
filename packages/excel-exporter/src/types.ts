@@ -40,7 +40,7 @@ export interface CellStyle {
 /**
  * Worker-compatible, data-describing format spec. Functions cannot cross the
  * structured-clone boundary into a Web Worker, so worker/stream mode accepts
- * FormatSpec only. Function form works in `main` mode (browser <500 rows / Node).
+ * FormatSpec only. Function form works in `main` mode (browser <20,000 rows / Node).
  */
 export type FormatSpec =
   | { type: "enum"; map: Record<string, string>; fallback?: string }

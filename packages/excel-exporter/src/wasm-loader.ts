@@ -61,12 +61,16 @@ class WasmLoader {
       );
     }
     if (this.promise) return this.promise;
-    this.promise = this.loadWithRetry();
+    // Capture the promise locally: updateOptions() may null this.promise while
+    // the load is in flight (wasmUrl changed), and this load must not clobber
+    // the reset state when it settles -- otherwise a superseded old-URL load
+    // would mark the loader ready and the new URL would never take effect.
+    const promise = (this.promise = this.loadWithRetry());
     try {
-      await this.promise;
-      this.state = "ready";
+      await promise;
+      if (this.promise === promise) this.state = "ready";
     } catch (e) {
-      this.state = "error";
+      if (this.promise === promise) this.state = "error";
       throw e;
     }
   }

@@ -69,7 +69,9 @@ export async function exportWithSheetJS(
     const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
     const blob = new Blob([out], { type: XLSX_MIME });
     options.onPhase?.("build", performance.now() - buildStart);
-    if (options.download !== false) {
+    // Node has no document: no download happens, so the phase is not reported
+    // (matches the ExportPhase contract in types.ts).
+    if (options.download !== false && typeof document !== "undefined") {
       const downloadStart = performance.now();
       triggerDownload(blob, options.filename);
       options.onPhase?.("download", performance.now() - downloadStart);

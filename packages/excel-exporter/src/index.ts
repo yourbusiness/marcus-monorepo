@@ -29,8 +29,8 @@ type PickedMode = { mode: ExportMode; workerMode?: "workbook" | "stream" };
 
 /**
  * Auto mode selection (verified against independent-process benchmarks).
- * - main fully blocks the thread; only for Node/SSR or browser <500 rows.
- * - browser >=500 rows go to a worker (main thread does one structured clone).
+ * - main fully blocks the thread; only for Node/SSR or browser <20,000 rows.
+ * - browser >=20,000 rows go to a worker (main thread does one structured clone).
  * - inside the worker, >=50k rows use stream (avoids the toBuffer cliff).
  */
 function pickMode(options: ExportOptions, totalRows: number): PickedMode {
@@ -152,7 +152,9 @@ export async function exportExcel(
         options.onPhase?.("build", performance.now() - buildStart);
       }
       options.onProgress?.(1);
-      if (options.download !== false) {
+      // Node has no document: triggerDownload would be a no-op, so neither the
+      // click nor the "download" phase is reported (matches ExportPhase docs).
+      if (options.download !== false && typeof document !== "undefined") {
         const downloadStart = performance.now();
         triggerDownload(result.blob!, options.filename);
         options.onPhase?.("download", performance.now() - downloadStart);

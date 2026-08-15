@@ -8,6 +8,8 @@ const XLSX_MIME =
 interface PendingEntry {
   resolve: (b: Uint8Array, rowCount: number) => void;
   reject: (e: Error) => void;
+  /** The worker instance this request was dispatched to (see onerror). */
+  worker: Worker;
   onProgress?: (progress: number) => void;
   onPhase?: (phase: "init" | "build", durationMs: number) => void;
 }
@@ -52,7 +54,7 @@ function getOrCreateWorker(): Worker {
       '[excel-exporter] workerUrl not configured. Call configureWasm({ workerUrl: "..." }) to point at export.worker.js (see README).',
     );
   }
-  worker = new Worker(workerUrl, { type: "module" });
+  const w = (worker = new Worker(workerUrl, { type: "module" }));
   // Single onmessage handler registered once, dispatches by id.
   worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
     const data = e.data;
@@ -74,11 +76,23 @@ function getOrCreateWorker(): Worker {
         new Error((data as WorkerErrResponse).error ?? "worker unknown error"),
       );
   };
-  worker.onerror = (err) => {
-    for (const [, p] of pending) p.reject(new Error(err.message));
-    pending.clear();
+  // A worker that errored (e.g. script failed to load) must not be reused:
+  // terminate it and drop the cached reference so the next export creates a
+  // fresh one, instead of failing forever into the SheetJS fallback. Only the
+  // requests dispatched to THIS worker are rejected -- a replacement worker
+  // may already be serving newer request ids.
+  w.onerror = (err) => {
+    if (worker === w) {
+      w.terminate();
+      worker = null;
+    }
+    for (const [id, p] of pending) {
+      if (p.worker !== w) continue;
+      pending.delete(id);
+      p.reject(new Error(err.message || "worker error"));
+    }
   };
-  return worker;
+  return w;
 }
 
 /** Strip function-form format before structured clone (functions cannot be cloned). */
@@ -122,6 +136,7 @@ export async function exportInWorker(
           );
         }, timeoutMs);
         pending.set(id, {
+          worker: w,
           resolve: (b: Uint8Array, rc: number) => {
             clearTimeout(timer);
             resolve([b, rc]);

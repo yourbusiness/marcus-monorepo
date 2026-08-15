@@ -30,7 +30,7 @@ Stream 路径的已知限制（v1）：
 | 日期格式                 | ✅ 按 pattern 输出可读字符串       |
 | 进度回调                 | ✅ 每 1000 行上报一次              |
 
-被跳过的布局特性会在 console 打印 `[excel-exporter] stream mode: layout features not supported (...)` 警告。
+被跳过的特性（单元格样式、列宽、冻结等）会在 console 打印 `[excel-exporter] stream mode: features not supported (...)` 警告。
 
 ## 什么时候该用哪个
 

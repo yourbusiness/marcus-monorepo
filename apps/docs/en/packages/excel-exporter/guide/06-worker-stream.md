@@ -30,7 +30,7 @@ Known stream limitations (v1):
 | Date formats                  | ✅ readable strings per pattern                       |
 | Progress callback             | ✅ reported every 1000 rows                           |
 
-Skipped layout features print `[excel-exporter] stream mode: layout features not supported (...)` in the console.
+Skipped features (cell styles, column width, freeze, ...) print `[excel-exporter] stream mode: features not supported (...)` in the console.
 
 ## Which path should I use?
 

@@ -328,7 +328,7 @@ export default function BasicExportDemo() {
     <Space orientation="vertical" size={16} style={{ width: "100%" }}>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
         配置行数与模式后导出，展示文件大小、耗时、吞吐等指标；多次导出会记录在下方
-        历史中对比（行数 ≥ 500 走 Worker，≥ 50,000 走流式）。
+        历史中对比（行数 ≥ 20,000 走 Worker，≥ 50,000 走流式）。
       </Typography.Paragraph>
 
       <Card>

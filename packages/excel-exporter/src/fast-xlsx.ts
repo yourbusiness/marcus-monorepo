@@ -182,12 +182,16 @@ export function exportFastXlsx(
       config.columns.some((c) => c.headerStyle !== undefined)
     )
       skipped.push("headerStyle");
+    // Data-cell styles are dropped just like layout features; warn so the
+    // degradation is visible instead of silent (headerStyle above already did).
+    if (config.columns.some((c) => c.style !== undefined))
+      skipped.push("style");
     if (config.freezeRows) skipped.push("freezeRows");
     if (config.autoFilter) skipped.push("autoFilter");
     if (config.merges?.length) skipped.push("merges");
     if (skipped.length) {
       console.warn(
-        "[excel-exporter] stream mode: layout features not supported (" +
+        "[excel-exporter] stream mode: features not supported (" +
           skipped.join(", ") +
           ")",
       );
