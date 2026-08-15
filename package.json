@@ -10,9 +10,9 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
-    "dev:play": "turbo run dev --filter=@marcusok/play",
-    "dev:docs": "turbo run dev --filter=@marcusok/docs",
+    "dev": "node scripts/dev.mjs",
+    "dev:play": "node scripts/dev.mjs play",
+    "dev:docs": "node scripts/dev.mjs docs",
     "build:docs": "turbo run build --filter=@marcusok/docs",
     "preview:docs": "pnpm --filter @marcusok/docs preview",
     "test": "turbo run test",

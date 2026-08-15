@@ -18,6 +18,7 @@ export default tseslint.config(
       "eslint.config.mjs",
       "packages/excel-exporter/tsup.config.ts",
       "packages/excel-exporter/vitest.config.ts",
+      "scripts/**",
     ],
   },
   ...tseslint.configs.recommendedTypeChecked,
