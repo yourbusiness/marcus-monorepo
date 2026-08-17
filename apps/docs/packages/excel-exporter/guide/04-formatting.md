@@ -1,6 +1,6 @@
 # 值格式化
 
-列级 `format` 可以是**结构化 FormatSpec**（跨线程安全，worker/stream 路径可用）或**函数**（仅 main 路径可用，函数无法穿过结构化克隆）。
+列级 `format` 可以是**结构化 FormatSpec**（跨线程安全，所有路径可用）或**函数**（主线程路径执行；浏览器 worker 路径会被剥离，见下文「函数形式」）。
 
 ## FormatSpec
 
@@ -42,7 +42,7 @@ columns: [
 ];
 ```
 
-## 函数形式（仅 main 路径）
+## 函数形式
 
 ```ts
 {
@@ -56,7 +56,7 @@ columns: [
 }
 ```
 
-函数签名：`(value: unknown, row: Record<string, unknown>) => string | number | boolean`。使用函数形式的列，导出路径会被限制为 `main`（浏览器 < 20,000 行 / Node），或需要改为 FormatSpec。
+函数签名：`(value: unknown, row: Record<string, unknown>) => string | number | boolean`。函数无法穿过结构化克隆，各路径行为不同：main 路径（浏览器 < 20,000 行 / Node < 50,000 行）与 Node 的 stream 路径（≥ 50,000 行，同样在主线程执行）正常执行；浏览器 worker 路径（auto ≥ 20,000 行，或显式 `mode: "worker"` / `mode: "stream"`）会**剥离函数并打印 `console.warn`**，该列以原始值导出（不报错、不回落 main）。需要 worker 路径保留格式时改为 FormatSpec。
 
 ## 跨模式精度注意事项
 

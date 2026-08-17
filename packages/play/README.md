@@ -18,20 +18,25 @@ Monorepo 本地联调沙箱，基于 **React 19 + TypeScript + Vite 8 + Ant Desi
 ## 用法
 
 ```bash
-# 推荐：从仓库根目录启动（turbo 会先 build 上游包，再并行启动上游 dev 与 play）
+# 推荐：从仓库根目录启动（统一 dev 启动器 scripts/dev.mjs）
 pnpm dev
 
-# 只起 play：先 build 上游包，再启动 vite（不启动 tsup --watch）
+# 只起 play：先 build 上游包，再启动 vite（不启动 tsup --watch 与 vitepress）
 pnpm dev:play
 ```
 
 两种方式的区别：
 
-- `pnpm dev`：等价于 `turbo run dev`。turbo 会先执行上游的 `build`（把
-  `excel-exporter` 等包构建出 `dist/`），再对所有定义了 `dev` script 的包并行执行
-  `dev`（目前是 excel-exporter 的 `tsup --watch` 和 play 的 `vite`）。
-- `pnpm dev:play`：等价于 `turbo run dev --filter=@marcusok/play`，
-  同样会先 build 上游，再只启动 play 的 vite。
+- `pnpm dev`：执行 `node scripts/dev.mjs`，先跑一遍 `turbo run build`（把
+  `excel-exporter` 等包构建出 `dist/`，等价于 turbo dev 的 `dependsOn: ["^build"]`），
+  再并行启动全部三个 dev 服务：excel-exporter 的 `tsup --watch`、play 的 `vite`
+  （5173）、docs 的 `vitepress dev`（5174）。
+- `pnpm dev:play`：执行 `node scripts/dev.mjs play`，同样先 build 上游，
+  再只启动 play 的 vite。
+
+> dev 启动器（`scripts/dev.mjs`）已替代 `turbo run dev`：Windows 下
+> turbo → pnpm.CMD → cmd.exe → node 的多层包装会断开 Ctrl+C 信号传递，
+> 导致子进程残留占用端口；启动器由 node 直接拉起各进程，退出时按进程树清理。
 
 Vite dev server 固定监听 `http://localhost:5173`（`strictPort`：端口被占用时直接
 报错，而不是静默换到 5174/5175；确需其它端口用 `vite --port <n>`）。
@@ -39,9 +44,9 @@ Vite dev server 固定监听 `http://localhost:5173`（`strictPort`：端口被�
 质量门禁：
 
 ```bash
-pnpm --filter play typecheck
-pnpm --filter play lint
-pnpm --filter play test
+pnpm --filter @marcusok/play typecheck
+pnpm --filter @marcusok/play lint
+pnpm --filter @marcusok/play test
 ```
 
 > play 是 `private` 包，不参与 changeset 发布；`build`（`vite build`）仅作为
@@ -78,7 +83,7 @@ pnpm --filter play test
 
 ### 包布局约定（由测试强制校验）
 
-`pnpm --filter play test` 会校验以下规则，新包接入不合规会直接红：
+`pnpm --filter @marcusok/play test` 会校验以下规则，新包接入不合规会直接红：
 
 - 每个被测包必须提供 `src/index.ts`（或 `src/index.tsx`）作为主入口，否则无法获得
   源码别名 HMR。Vite 启动时对不合规的依赖包会打印警告并走 dist 解析。

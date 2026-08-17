@@ -11,7 +11,9 @@
 ```ts
 import { exportExcel } from "@marcusok/excel-exporter";
 
-const rows = salesMockRows(100_000);
+// rows：业务侧的销售明细数据，字段与下方 columns 一一对应
+//（由你的业务代码提供，此处省略取数过程；示例场景为 10 万行，
+//  在线演示用的是同形状的 mock 数据）
 
 const result = await exportExcel({
   filename: "大文件导出-10w",

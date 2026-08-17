@@ -24,10 +24,10 @@ pnpm add xlsx
 
 浏览器运行需要两份资源可被站点访问：
 
-| 资源               | 说明                                                                         |
-| ------------------ | ---------------------------------------------------------------------------- |
-| `modern-xlsx.wasm` | WASM 核心（约 0.9MB），`configureWasm({ wasmUrl })` 指定                     |
-| `export.worker.js` | Worker 多线程入口，`configureWasm({ workerUrl })` 指定，仅在 worker 路径需要 |
+| 资源               | 说明                                                                                                                                                         |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `modern-xlsx.wasm` | WASM 核心（约 1.9MB），`configureWasm({ wasmUrl })` 指定                                                                                                     |
+| `export.worker.js` | Worker 多线程入口，`configureWasm({ workerUrl })` 指定；浏览器中凡进入 Worker 的路径都需要（auto ≥ 20,000 行，以及显式 `mode: "worker"` / `mode: "stream"`） |
 
 推荐在 Vite 插件的 `buildStart` 中从 `require.resolve` 反推真实路径拷贝到 `public/assets/`（避免硬编码 node_modules 路径，pnpm 符号链接下更稳）：
 
@@ -87,4 +87,4 @@ configureWasm({
 
 ## Node / SSR
 
-Node 环境无需部署静态资源，也无需 `configureWasm`，直接调用即可（WASM 由 modern-xlsx 包内提供）。`auto` 模式下 Node 不会走 Worker，而是主线程执行；≥ 5 万行自动切换流式路径。详见 [Node/SSR](/packages/excel-exporter/guide/09-node-ssr)。
+Node 环境无需部署浏览器静态资源，但**本地运行时需要先初始化 WASM**：自动探测得到的 `file://` 地址无法被 Node 的 fetch 加载，若不引导会静默降级到无样式的 SheetJS 兜底。做法是在入口先 `initWasmSync(readFileSync(...))`（见 [Node/SSR](/packages/excel-exporter/guide/09-node-ssr) 的完整示例），或通过 `configureWasm({ wasmUrl })` 指定一个可 fetch 的 HTTP 地址。`auto` 模式下 Node 不会走 Worker，而是主线程执行；≥ 5 万行自动切换流式路径（流式路径不依赖 WASM）。

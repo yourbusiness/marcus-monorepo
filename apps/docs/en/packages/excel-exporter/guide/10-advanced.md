@@ -14,7 +14,7 @@ await exportExcel({
 });
 ```
 
-Sheet names must satisfy ECMA-376 constraints: non-empty, ≤ 31 characters, and must not contain `: \ / ? * [ ]`. Violations throw a clear error instead of producing a corrupt file.
+Sheet names must satisfy ECMA-376 constraints: non-empty, ≤ 31 characters, and must not contain `: \ / ? * [ ]`. A violation never produces a corrupt file and never throws to the caller — the validation error is caught and routed through the fallback, which re-validates the same name, so the export finally resolves with `{ success: false, error }` (with a clear error message).
 
 ## Frozen rows
 
@@ -45,7 +45,7 @@ Sheet names must satisfy ECMA-376 constraints: non-empty, ≤ 31 characters, and
 await exportExcel({
   ...,
   onProgress: (progress) => {
-    // 0 → 1; effective on worker/stream paths (stream reports every 1000 rows)
+    // 0 → 1; incremental progress only on the stream path (every 1000 rows); main and worker+Workbook fire just 0 and 1
     bar.style.width = `${progress * 100}%`;
   },
   onPhase: (phase, durationMs) => {

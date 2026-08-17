@@ -44,6 +44,18 @@ if (result.success && result.blob) {
 ```ts
 // app/api/export/route.ts
 import { exportExcel } from "@marcusok/excel-exporter";
+import { initWasmSync } from "modern-xlsx";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+
+// 与上面「落盘」示例相同：Node 下必须先初始化 WASM（模块加载时执行一次），
+// 否则 exportExcel 会降级到无样式的 SheetJS 兜底。
+const require = createRequire(import.meta.url);
+initWasmSync(
+  readFileSync(
+    `${require("node:path").dirname(require.resolve("modern-xlsx"))}/modern-xlsx.wasm`,
+  ),
+);
 
 export async function GET() {
   const result = await exportExcel({

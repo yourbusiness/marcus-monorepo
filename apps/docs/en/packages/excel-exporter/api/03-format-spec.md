@@ -1,6 +1,6 @@
 # API: FormatSpec
 
-A structured, thread-safe value-formatting description. Worker/Stream paths only accept FormatSpec; the function form is main-path only.
+A structured, thread-safe value-formatting description. Prefer FormatSpec on worker/stream paths; the actual reach of the function form is covered in "Function form" at the end.
 
 ## Type definition
 
@@ -43,15 +43,21 @@ Accepts `Date` / parseable string / timestamp. The Workbook path writes an Excel
 ### padding
 
 ```ts
-{ type: "padding", fill: "0", length: 6, align: "left" }
+{ type: "padding", fill: "0", length: 6 } // "42" -> "000042"
 ```
 
-Pads left (`padEnd`) or right (`padStart`) to a fixed length; good for IDs.
+Omitting `align` (the default) maps to `padStart`: the fill goes on the **left** (value right-aligned) — right for leading-zero IDs. `align: "left"` maps to `padEnd`: the fill goes on the **right** (value left-aligned).
 
-## Function form (main path)
+## Function form
 
 ```ts
 format: (value, row) => string | number | boolean;
 ```
 
-Can access the whole row for conditional formatting. Columns using function form restrict exports to the `main` path; convert to FormatSpec for worker/stream.
+Can access the whole row for conditional formatting. Functions cannot cross the structured-clone boundary, so behavior differs per path:
+
+- **main path** (browser < 20,000 rows / Node < 50,000 rows): executed normally;
+- **Node's stream path** (≥ 50,000 rows): also main-thread, executed normally;
+- **browser worker path** (auto ≥ 20,000 rows, or explicit `mode: "worker"` / `mode: "stream"`): functions are **stripped with a `console.warn`** and the column exports its raw value (no error, no fallback to main).
+
+Convert to FormatSpec to keep formatting on the worker path.

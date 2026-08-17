@@ -10,26 +10,26 @@ The single entry point. Routes to main / worker / stream by row count and enviro
 
 ## ExportOptions
 
-| Field        | Type                                               | Required | Description                                   |
-| ------------ | -------------------------------------------------- | -------- | --------------------------------------------- |
-| `sheets`     | `SheetConfig[]`                                    | ✅       | At least one sheet                            |
-| `filename`   | `string`                                           | ✅       | Download name; `.xlsx` is appended if missing |
-| `mode`       | `"auto" \| "main" \| "worker" \| "stream"`         | —        | Default `"auto"`                              |
-| `onProgress` | `(progress: number) => void`                       | —        | 0 → 1; effective on worker/stream paths       |
-| `onPhase`    | `(phase: ExportPhase, durationMs: number) => void` | —        | `init` / `build` / `download` timings         |
-| `download`   | `boolean`                                          | —        | Default `true`; `false` returns the Blob only |
+| Field        | Type                                               | Required | Description                                                                                                        |
+| ------------ | -------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `sheets`     | `SheetConfig[]`                                    | ✅       | At least one sheet                                                                                                 |
+| `filename`   | `string`                                           | ✅       | Download name; `.xlsx` is appended if missing                                                                      |
+| `mode`       | `"auto" \| "main" \| "worker" \| "stream"`         | —        | Default `"auto"`                                                                                                   |
+| `onProgress` | `(progress: number) => void`                       | —        | 0 → 1; incremental progress only on the stream path (every 1,000 rows); main and worker+Workbook fire just 0 and 1 |
+| `onPhase`    | `(phase: ExportPhase, durationMs: number) => void` | —        | `init` / `build` / `download` timings                                                                              |
+| `download`   | `boolean`                                          | —        | Default `true`; `false` returns the Blob only                                                                      |
 
 ## ExportResult
 
-| Field       | Type                         | Description                  |
-| ----------- | ---------------------------- | ---------------------------- |
-| `success`   | `boolean`                    | Whether the export succeeded |
-| `blob?`     | `Blob`                       | The file content             |
-| `engine?`   | `"modern-xlsx" \| "sheetjs"` | Engine actually used         |
-| `mode?`     | `ExportMode`                 | Mode actually used           |
-| `duration?` | `number`                     | Total duration in ms         |
-| `rowCount?` | `number`                     | Exported row count           |
-| `error?`    | `Error`                      | Failure reason               |
+| Field       | Type                         | Description                                    |
+| ----------- | ---------------------------- | ---------------------------------------------- |
+| `success`   | `boolean`                    | Whether the export succeeded                   |
+| `blob?`     | `Blob`                       | The file content                               |
+| `engine?`   | `"modern-xlsx" \| "sheetjs"` | Engine actually used                           |
+| `mode?`     | `ExportMode`                 | Mode actually used                             |
+| `duration?` | `number`                     | Total duration in ms                           |
+| `rowCount?` | `number`                     | Exported row count                             |
+| `error?`    | `Error`                      | Failure reason (also set on the fallback path) |
 
 ## configureWasm
 

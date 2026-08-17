@@ -11,8 +11,9 @@
 ```ts
 import { exportExcel, StylePresets } from "@marcusok/excel-exporter";
 
-// 业务侧拿到 1 万行数据（此处由文档站 mock 生成器产生）
-const rows = salesMockRows(10_000);
+// rows：业务侧的销售明细数据，字段与下方 columns 一一对应
+//（由你的业务代码提供，此处省略取数过程；示例场景为 1 万行，
+//  在线演示用的是同形状的 mock 数据）
 
 const result = await exportExcel({
   filename: "销售月报-2026-07",
@@ -60,7 +61,8 @@ const result = await exportExcel({
 
 ## 要点
 
-- 1 万行在浏览器会走 `worker + Workbook`，主线程不卡顿，且样式完整保留；
+- 1 万行低于 20,000 行阈值，浏览器下走 `main` 路径（主线程 Workbook，样式完整保留）；数据量 ≥ 20,000 行时自动切换到 `worker + Workbook`，主线程不阻塞；
+- `onProgress` 在 `main` 路径只回调首尾（0 与 1），1 万行下进度条会直接跳满；需要分段进度必须走 stream 路径（≥ 50,000 行，每 1000 行上报一次；worker + Workbook 路径同样只有首尾两次回调）；
 - 金额列用 `StylePresets.currency`（千分位 + 两位小数，右对齐）；
 - 状态列用 `enum` 把内部码映射为中文，兜底 `"未知"`；
 - `freezeRows + autoFilter` 让管理层在 Excel 里直接筛选。

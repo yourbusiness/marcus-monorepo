@@ -1,6 +1,6 @@
 # Value Formatting
 
-Column `format` can be a structured **FormatSpec** (thread-safe; used by worker/stream paths) or a **function** (main path only — functions cannot cross the structured-clone boundary).
+Column `format` can be a structured **FormatSpec** (thread-safe; works on all paths) or a **function** (executed on main-thread paths; stripped on the browser worker path — see "Function form" below).
 
 ## FormatSpec
 
@@ -42,7 +42,7 @@ columns: [
 ];
 ```
 
-## Function form (main path only)
+## Function form
 
 ```ts
 {
@@ -56,7 +56,7 @@ columns: [
 }
 ```
 
-Signature: `(value: unknown, row: Record<string, unknown>) => string | number | boolean`. Columns using function form limit the export to the `main` path (browser < 20,000 rows / Node); convert to FormatSpec for worker/stream.
+Signature: `(value: unknown, row: Record<string, unknown>) => string | number | boolean`. Functions cannot cross the structured-clone boundary, so behavior differs per path: the main path (browser < 20,000 rows / Node < 50,000 rows) and Node's stream path (≥ 50,000 rows, also main-thread) execute them normally; the browser worker path (auto ≥ 20,000 rows, or explicit `mode: "worker"` / `mode: "stream"`) **strips them with a `console.warn`** and exports the raw value (no error, no fallback to main). Convert to FormatSpec to keep formatting on the worker path.
 
 ## Cross-path precision notes
 

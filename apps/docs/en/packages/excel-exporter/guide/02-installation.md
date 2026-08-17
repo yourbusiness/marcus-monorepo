@@ -24,10 +24,10 @@ Without it, the fallback dynamically loads `xlsx.mjs` (0.20.3) from the official
 
 Two assets must be reachable by your site:
 
-| Asset              | Description                                                                              |
-| ------------------ | ---------------------------------------------------------------------------------------- |
-| `modern-xlsx.wasm` | WASM core (~0.9MB), pointed to by `configureWasm({ wasmUrl })`                           |
-| `export.worker.js` | Worker entry, pointed to by `configureWasm({ workerUrl })`; only needed for worker paths |
+| Asset              | Description                                                                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modern-xlsx.wasm` | WASM core (~1.9MB), pointed to by `configureWasm({ wasmUrl })`                                                                                                                        |
+| `export.worker.js` | Worker entry, pointed to by `configureWasm({ workerUrl })`; needed by every browser path that enters a Worker (auto ≥ 20,000 rows, plus explicit `mode: "worker"` / `mode: "stream"`) |
 
 Recommended: a Vite plugin that resolves real paths from `require.resolve` in `buildStart` and copies them to `public/assets/` (robust under pnpm symlinks):
 
@@ -87,4 +87,4 @@ configureWasm({
 
 ## Node / SSR
 
-No static assets and no `configureWasm` needed in Node — the WASM module ships inside the package. `auto` never uses Workers in Node; ≥ 50k rows switch to streaming on the main thread. See [Node/SSR](/en/packages/excel-exporter/guide/09-node-ssr).
+No browser static assets are needed in Node, but **WASM must be initialized first when running locally**: the auto-detected `file://` URL cannot be fetched by Node, and without bootstrapping the export silently degrades to the style-less SheetJS fallback. Either call `initWasmSync(readFileSync(...))` at your entry (full example in [Node/SSR](/en/packages/excel-exporter/guide/09-node-ssr)) or point `configureWasm({ wasmUrl })` at a fetchable HTTP URL. `auto` never uses Workers in Node; ≥ 50k rows switch to streaming on the main thread (the stream path does not use WASM).

@@ -14,14 +14,14 @@
 
 ## ColumnConfig
 
-| 字段           | 类型                     | 必填 | 说明                                     |
-| -------------- | ------------------------ | ---- | ---------------------------------------- |
-| `key`          | `string`                 | ✅   | 数据行字段名                             |
-| `header`       | `string`                 | ✅   | 表头文字                                 |
-| `width?`       | `number`                 | —    | 列宽（Excel 字符单位）                   |
-| `style?`       | `CellStyle`              | —    | 数据单元格样式（不含表头）               |
-| `headerStyle?` | `CellStyle`              | —    | 当前列表头样式，优先于表级 `headerStyle` |
-| `format?`      | `FormatSpec \| Function` | —    | 值格式化；函数仅 main 路径可用           |
+| 字段           | 类型                     | 必填 | 说明                                                                             |
+| -------------- | ------------------------ | ---- | -------------------------------------------------------------------------------- |
+| `key`          | `string`                 | ✅   | 数据行字段名                                                                     |
+| `header`       | `string`                 | ✅   | 表头文字                                                                         |
+| `width?`       | `number`                 | —    | 列宽（Excel 字符单位）                                                           |
+| `style?`       | `CellStyle`              | —    | 数据单元格样式（不含表头）                                                       |
+| `headerStyle?` | `CellStyle`              | —    | 当前列表头样式，优先于表级 `headerStyle`                                         |
+| `format?`      | `FormatSpec \| Function` | —    | 值格式化；函数在主线程路径执行，浏览器 worker 路径会被剥离（详见 FormatSpec 页） |
 
 ## MergeRange
 

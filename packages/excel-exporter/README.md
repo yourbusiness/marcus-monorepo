@@ -2,9 +2,11 @@
 
 基于 [modern-xlsx](https://github.com/ABCrimson/modern-xlsx)（WASM）与自研 Fast stream 构建的高性能 Excel 导出库。提供声明式 API、自动模式路由、完整单元格样式、Web Worker 多线程、快速写入以及 SheetJS 降级保底。
 
+> 📖 **在线文档**：https://yourbusiness.github.io/marcus-monorepo/packages/excel-exporter/
+
 ## 性能参考
 
-本机实测（真实 Chrome + Play 同款 6 列；Node 独立进程用于回归，见 `src/__tests__/performance.test.ts`）：
+本机实测（真实 Chrome + Play 同款 6 列；Node 独立进程回归测试用 4 列精简列集，见 `src/__tests__/performance.test.ts`）：
 
 | 数据量  | auto 路由   | 实测耗时 | 硬性要求 |
 | ------- | ----------- | -------- | -------- |
@@ -20,15 +22,15 @@
 pnpm add @marcusok/excel-exporter modern-xlsx
 ```
 
-环境：Node >= 22、pnpm >= 9。modern-xlsx@1.2.0 声明 `engines.node>=24`，但其 WASM 核心面向浏览器；本包在 Node 22 下 35 个测试全部通过。本包在 1.2.0 上开发测试，推荐消费方锁定此版本（peerDep 兼容范围 `^1.2.0`，但未验证更高版本）。
+环境：Node >= 22、pnpm >= 9。modern-xlsx@1.2.0 声明 `engines.node>=24`，但其 WASM 核心面向浏览器；本包在 Node 22 下测试全部通过（共 47 个用例；CI 默认 `RUN_PERF=0` 跳过 4 个性能基准，实跑 43 个）。本包在 1.2.0 上开发测试，推荐消费方锁定此版本（peerDep 兼容范围 `^1.2.0`，但未验证更高版本）。
 
-> modern-xlsx 声明为 `peerDependency`，消费方必须显式安装。原因：(1) `modern-xlsx.wasm`（1.9MB）需由消费方作为静态资源部署，隐式依赖会掩盖这一硬性要求；(2) peerDep 语义上正确——本包是 modern-xlsx 的封装，版本控制权在消费方；(3) pnpm 默认不自动安装 peerDep。`xlsx`（SheetJS）为 optional peerDep，仅在需要降级保底时安装。
+> modern-xlsx 声明为 `peerDependency`，消费方必须显式安装。原因：(1) `modern-xlsx.wasm`（1.9MB）需由消费方作为静态资源部署，隐式依赖会掩盖这一硬性要求；(2) peerDep 语义上正确——本包是 modern-xlsx 的封装，版本控制权在消费方；(3) 包管理器默认会自动安装 peerDependency（npm 7+ / pnpm 8+ 起），隐式装上的版本不受消费方掌控，显式声明才能锁定版本意图。`xlsx`（SheetJS）为 optional peerDep，仅在需要降级保底时安装。
 
 ## 配置（浏览器）
 
 两份静态资源必须在消费方站点可访问：`modern-xlsx.wasm`（1.9MB）和 `export.worker.js`。
 
-推荐 Vite 插件在 `buildStart` 中从 `require.resolve` 反推真实路径拷贝到 `public/assets/`，避免硬编码 `node_modules`（pnpm 符号链接不兼容）。详见 [设计文档 6.2](../../docs/excel-export-design.md)。
+推荐 Vite 插件在 `buildStart` 中从 `require.resolve` 反推真实路径拷贝到 `public/assets/`，避免硬编码 `node_modules`（pnpm 符号链接不兼容）。详见 [设计文档 6.2](https://github.com/yourbusiness/marcus-monorepo/blob/main/docs/excel-export-design.md)。
 
 ```ts
 // vite.config.ts

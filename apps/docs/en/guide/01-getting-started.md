@@ -10,9 +10,9 @@ pnpm add @marcusok/excel-exporter modern-xlsx
 
 `modern-xlsx` is a required peerDependency because:
 
-1. `modern-xlsx.wasm` (~0.9MB) must be self-hosted by the consumer as a static asset — an implicit dependency would hide this hard requirement;
+1. `modern-xlsx.wasm` (~1.9MB) must be self-hosted by the consumer as a static asset — an implicit dependency would hide this hard requirement;
 2. this package wraps modern-xlsx; consumers should own version control;
-3. pnpm does not auto-install peerDependencies by default.
+3. package managers do auto-install peerDependencies by default (npm 7+ / pnpm 8+), but the implicitly picked version is not under your control — declaring it explicitly pins your intent.
 
 `xlsx` (SheetJS) is an **optional** peerDependency used only by the fallback path; without it the fallback loads from the official CDN.
 
@@ -69,7 +69,7 @@ configureWasm({
 });
 ```
 
-Node / SSR environments need **no** static assets; just call the API.
+Node / SSR environments need **no** browser static assets, but WASM must be initialized first when running locally (`initWasmSync`, see [Node/SSR](/en/packages/excel-exporter/guide/09-node-ssr)) — otherwise the export degrades to the style-less SheetJS fallback.
 
 ## 3. First export
 

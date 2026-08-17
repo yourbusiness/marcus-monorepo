@@ -38,12 +38,16 @@ pnpm typecheck   # TypeScript 类型检查
 
 ```
 marcus-monorepo/
+├── apps/                       # 应用（水平扩展）
+│   └── docs/                   # VitePress 公开文档站（中英双语，GitHub Pages）
 ├── packages/                   # 共享包（水平扩展）
-│   └── excel-exporter/         # 当前：Excel 导出
-│       ├── src/                # 23 个 .ts 文件（14 个源文件 + 9 个测试文件）
-│       └── dist/               # tsup 构建产物
+│   ├── excel-exporter/         # 当前：Excel 导出
+│   │   ├── src/                # 24 个 .ts 文件（15 个源文件 + 9 个测试文件）
+│   │   └── dist/               # tsup 构建产物
+│   └── play/                   # 本地联调沙箱（React 19 + antd 6，private 包）
 ├── docs/                       # 设计文档
 │   └── excel-export-design.md  # Excel 导出核心设计文档（13 万字符）
+├── scripts/                    # 仓库级脚本（dev.mjs 统一 dev 启动器）
 ├── .changeset/                 # Changesets 配置
 ├── .github/workflows/          # CI/CD
 ├── turbo.json                  # Turborepo 任务编排
@@ -57,7 +61,7 @@ marcus-monorepo/
 
 1. 在 `packages/<name>/` 下创建，使用 `workspace:*` 引用内部依赖。
 2. 子包 `package.json` 声明 `type: "module"`，构建用 tsup，测试用 Vitest。
-3. 跨包共享配置（tsconfig/eslint）抽到 `packages/_shared/`，通过 `devDependencies` 引用。
+3. 跨包共享配置直接复用仓库根的 `tsconfig.base.json` 与 `eslint.config.mjs`（暂无 `packages/_shared/`，出现包级共享配置需求时再抽取）。
 4. `turbo.json` 的 `^build` 依赖图自动处理构建顺序，新增包无需改动 CI/CD。
 5. Changesets 为每个包独立发版，互不阻塞。
 
@@ -83,8 +87,10 @@ pnpm changeset publish         # 以 next dist-tag 发布
 - [`docs/excel-export-design.md`](./docs/excel-export-design.md) — Excel 导出核心设计文档
 - [`docs/release-guide.md`](./docs/release-guide.md) — 发布指南
 - [`docs/release-publish-logic.md`](./docs/release-publish-logic.md) — 发布逻辑详解
+- [`docs/release-workflow-analysis.md`](./docs/release-workflow-analysis.md) — 发布工作流分析
 - [`docs/ci-workflow-analysis.md`](./docs/ci-workflow-analysis.md) — CI 工作流分析
 - [`docs/changeset-walkthrough.md`](./docs/changeset-walkthrough.md) — Changesets 使用说明
+- [`docs/vitepress-docs-plan.md`](./docs/vitepress-docs-plan.md) — 文档站规划
 - [`docs/debug.md`](./docs/debug.md) — 调试指南
 
 ## License

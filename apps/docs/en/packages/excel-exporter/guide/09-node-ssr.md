@@ -44,6 +44,19 @@ if (result.success && result.blob) {
 ```ts
 // app/api/export/route.ts
 import { exportExcel } from "@marcusok/excel-exporter";
+import { initWasmSync } from "modern-xlsx";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+
+// Same bootstrap as the "write to disk" example above: Node must initialize
+// WASM first (once, at module load) — otherwise exportExcel degrades to the
+// style-less SheetJS fallback.
+const require = createRequire(import.meta.url);
+initWasmSync(
+  readFileSync(
+    `${require("node:path").dirname(require.resolve("modern-xlsx"))}/modern-xlsx.wasm`,
+  ),
+);
 
 export async function GET() {
   const result = await exportExcel({

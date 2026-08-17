@@ -33,4 +33,4 @@ import type { StylePresetName } from "@marcusok/excel-exporter";
 const name: StylePresetName = "currency"; // "header" | "currency" | "percent" | "date" | "datetime" | "dataRow" | "danger"
 ```
 
-> Column `style` applies to data cells, not headers. If you need header styling, build a custom `CellStyle` and apply it in your business layer.
+> Column `style` applies to data cells, not headers. For header styling use the `headerStyle` field directly (sheet-level `SheetConfig.headerStyle` sets the default; column-level `ColumnConfig.headerStyle` overrides it), e.g. `headerStyle: StylePresets.header`.

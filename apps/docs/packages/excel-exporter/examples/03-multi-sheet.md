@@ -11,6 +11,9 @@
 ```ts
 import { exportExcel, StylePresets } from "@marcusok/excel-exporter";
 
+// salesRows / staffRows：业务侧数据（由你的业务代码提供，此处省略取数过程），
+// 字段分别与两个 sheet 的 columns 一一对应
+
 const result = await exportExcel({
   filename: "部门经营快报-2026-Q3",
   sheets: [

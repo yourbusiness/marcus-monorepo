@@ -1,6 +1,6 @@
 # Example: Inventory Ledger Export
 
-Inventory ledgers should highlight low-stock and out-of-stock items. This example combines a custom `CellStyle` with function-form formatting (main path).
+Inventory ledgers should make risk items stand out. This example combines a custom `CellStyle` (applied to the whole column) with enum mapping.
 
 ## Mock data preview
 
@@ -11,6 +11,9 @@ Inventory ledgers should highlight low-stock and out-of-stock items. This exampl
 ```ts
 import { exportExcel } from "@marcusok/excel-exporter";
 import type { CellStyle } from "@marcusok/excel-exporter";
+
+// rows: inventory data from your business layer, fields matching the
+// columns below (fetching is omitted here)
 
 const lowStock: CellStyle = {
   font: { color: "C00000", bold: true },
@@ -64,7 +67,7 @@ const result = await exportExcel({
 
 ## Notes
 
-- The custom `lowStock` style (bold red + light red fill) makes risk items obvious;
+- The custom `lowStock` style (bold red + light red fill) highlights risk items — note that a column-level `style` applies to **every** data row in the column; per-row conditional styling is not supported in v1, so use the status column's enum labels to flag individual risk items;
 - Column-level `style` applies to the whole data column — a good fit for status columns;
 - `merges` are positioned relative to the data area;
 - Small data (< 20,000 rows) stays on the styled `main` path with default `auto`.

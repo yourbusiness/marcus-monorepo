@@ -8,6 +8,8 @@
 
 > ✅ **v2.5（当前实现）：大文件路径已切换到自研 `fast-xlsx.ts` + fflate**。原始硬指标（1万 <200ms / 5万 <500ms / 10万 <1000ms，4 列基准）已恢复为验收口径；下方 v2.0 关于 `StreamingXlsxWriter` 的 5万/10万数据为历史基线，仅用于记录 modern-xlsx 原实现的不可达原因，不再代表当前代码行为。
 
+> 🔄 **v2.6（源码再对齐，2026-08-17）**：正文多处仍以 `WORKER_THRESHOLD = 500` 为现行口径，与 `src/index.ts` 现状（`WORKER_THRESHOLD = 20_000`，提交 0c0fbd5 起）不符——**浏览器 auto 现为 <20,000 行 main、20,000–49,999 行 worker+Workbook**（1.2 验收表、5.3 调度表、风险表等已同步修正）。4.8/4.9/4.10/7.2 的"现行源码"快照已整体刷新为当前实现：streaming-builder 薄委托 fast-xlsx（快照含完整 fast-xlsx.ts）；worker `onerror` 对坏实例 terminate 后重建、仅 reject 该实例的请求，并转发 onPhase（提交 12d47a4）；stream 路径不再要求 WASM（不支持 WebAssembly 的浏览器 ≥5 万行仍可正常导出）。4.1/4.2 快照补齐 fast-xlsx/table-export/echarts-export 与 fflate 运行时依赖。v2.5 及以前的推导过程与数据保留为历史记录，带【历史】标注。
+
 > 🚨🚨🚨 **v2.0 评审修正（基于二次独立实测 + 源码核对，修正 v1.9 遗留的错误数字、内部矛盾与代码缺陷）**
 >
 > v1.9 用独立进程实测发现了 toBuffer 塌方（方向正确，已二次复现确认），但 v1.9 自身遗留三类问题：(A) 几个被夸大/记串的数字；(B) 文档内部前后矛盾（5.3 调度表是 v1.8 残留、4.9 format 两段自相矛盾）；(C) 代码缺陷（format 联合类型调用会运行时崩溃）。v2.0 逐一修正，并将性能验收口径对齐**真实可达水平**（原 5万<500ms / 10万<1000ms 的硬指标经实测证明在 modern-xlsx 下结构性不可达，见 1.2 说明）。
@@ -48,17 +50,19 @@
 
 **验收口径表（v2.0，首次导出，4 列基准）**：
 
-| 数据量  | 端到端耗时上限（目标） | 主线程阻塞 | 路由                                         | v2.5 本机实测（Node，auto 路径） |
-| ------- | ---------------------- | ---------- | -------------------------------------------- | -------------------------------- |
-| 1 万行  | < 200 ms               | ≤ 16 ms    | worker（Workbook 路径）                      | ~117ms（余量 ~1.7x）             |
-| 5 万行  | **< 500 ms**           | ≤ 50 ms    | worker + Fast stream（auto 下 50000 起切流） | ~377ms（余量 ~1.3x）             |
-| 10 万行 | **< 1000 ms**          | ≤ 100 ms   | worker + Fast stream（`fast-xlsx.ts`）       | ~762ms（余量 ~1.3x）             |
-| 失败率  | 内存溢出失败率 = 0     | —          | Fast stream 单文件内存可控                   | round-trip 校验通过              |
-| 复用率  | 所有 App 接入率 100%   | —          | 共享包                                       | —                                |
+| 数据量  | 端到端耗时上限（目标） | 主线程阻塞                                | 路由                                            | v2.5 本机实测（Node，auto 路径） |
+| ------- | ---------------------- | ----------------------------------------- | ----------------------------------------------- | -------------------------------- |
+| 1 万行  | < 200 ms               | ~120 ms 量级（v2.6：现行走 main，见下注） | main（浏览器 auto <20,000 行；Node <50,000 行） | ~117ms（余量 ~1.7x）             |
+| 5 万行  | **< 500 ms**           | ≤ 50 ms（worker 入向克隆）                | worker + Fast stream（auto 下 50000 起切流）    | ~377ms（余量 ~1.3x）             |
+| 10 万行 | **< 1000 ms**          | ≤ 100 ms（worker 入向克隆）               | worker + Fast stream（`fast-xlsx.ts`）          | ~762ms（余量 ~1.3x）             |
+| 失败率  | 内存溢出失败率 = 0     | —                                         | Fast stream 单文件内存可控                      | round-trip 校验通过              |
+| 复用率  | 所有 App 接入率 100%   | —                                         | 共享包                                          | —                                |
+
+> 📌 **v2.6 路由口径变更**：v2.0 表原按 `WORKER_THRESHOLD=500` 把 1 万行路由到 worker（主线程阻塞预算 ≤16ms 由入向克隆 9ms 支撑）。现行 `WORKER_THRESHOLD=20_000`（提交 0c0fbd5）下，浏览器 1 万行 auto 走 **main**，主线程阻塞约 120ms 量级（Node 实测 ~117ms，4 列）——产品决策为「<20,000 行接受主线程短阻塞、≥20,000 行才进 Worker」（见 README「Worker 阈值 20,000 行」）。5 万/10 万行仍为 worker 路径，主线程阻塞预算（克隆 46/94ms）不变。
 
 > 📌 **关于实测口径（v2.4 修订）**：1.2 表与 5.3 调度表中的实测耗时（1万 109ms / 5万 ~850ms（stream）/ 10万 1,548ms）均为 **Node 单线程 WASM-core 计时**（`sheetAddAoa`+`toBuffer` / `writeRow`+`finish`），作为 worker 内等价 WASM 工作的代理依据——worker 线程执行的是同一套 WASM 调用，耗时相当；但 worker 端到端还叠加入向结构化克隆（1万 9ms / 5万 46ms / 10万 94ms）、Worker 启动与 WASM 首次编译、出向 Transferable 回传，**从未实测**，属 7.3 Playwright 计划（当前未实现，见该节）。表中「端到端耗时上限」为验收目标值，其达成须以 7.3 浏览器端到端为准，不能由 Node WASM-core 数字直接断定。
 
-> 📌 **关于主线程阻塞预算**：所有浏览器交互导出（≥500 行）在 Worker 线程执行 WASM 工作，主线程只做一次 `postMessage(options)` 结构化克隆。实测结构化克隆开销：1万行 9ms / 5万行 46ms / 10万行 94ms。1 万行可达 ≤16ms；5 万行 46ms 超出 16ms，放宽到 ≤50ms；10 万行 94ms，放宽到 ≤100ms。Worker 内无论 Workbook 还是 stream，耗时都不阻塞主线程。 另注：`PerformanceObserver` 的 `longtask` 条目以 50ms 为固定阈值，7.3 用它断言「无 longtask」，**无法分辨 16–50ms 区间的主线程占用**；故 1万行 ≤16ms 预算由结构化克隆实测 9ms 直接支撑，而非靠 longtask 断言把关。
+> 📌 **关于主线程阻塞预算（v2.6 修订）**：浏览器交互导出中 **≥20,000 行**（现行 `WORKER_THRESHOLD`，提交 0c0fbd5 起；v2.0 时为 ≥500 行）在 Worker 线程执行 WASM 工作，主线程只做一次 `postMessage(options)` 结构化克隆。实测结构化克隆开销：1万行 9ms / 5万行 46ms / 10万行 94ms。据此 5 万行预算 ≤50ms、10 万行 ≤100ms；<20,000 行的浏览器导出（含 1 万行）现行走 main，主线程阻塞约 120ms 量级（见上方 v2.6 路由口径变更注）。Worker 内无论 Workbook 还是 stream，耗时都不阻塞主线程。 另注：`PerformanceObserver` 的 `longtask` 条目以 50ms 为固定阈值，7.3 用它断言「无 longtask」，**无法分辨 16–50ms 区间的主线程占用**。
 
 **列数缩放规则（仅 Workbook 路径，auto 路由为 <5 万行即 ≤49,999 行）**：
 
@@ -594,12 +598,15 @@ jobs:
 ```
 packages/excel-exporter/
 ├── src/
-│   ├── index.ts                # 对外统一 API（exportExcel）
+│   ├── index.ts                # 对外统一 API（exportExcel/exportTable/exportEcharts）
 │   ├── types.ts                # 类型定义（CellStyle/ColumnConfig/FormatSpec/SheetConfig …）
 │   ├── format-utils.ts         # FormatSpec 解析与格式化（applyFormat/resolveCellFormat/displayValue/numFormatForSpec/formatDateByPattern/validateSheetName）
 │   ├── wasm-loader.ts          # WASM 加载/单例/超时重试/能力检测
 │   ├── workbook-builder.ts     # 主线程构建器（批量写入，<5 万行即 ≤49,999 行主路径）
-│   ├── streaming-builder.ts    # 流式构建器（≥5 万行主路径）
+│   ├── streaming-builder.ts    # 流式构建器（≥5 万行主路径；薄委托 fast-xlsx）
+│   ├── fast-xlsx.ts            # 自研 minimal OOXML writer（fflate，v2.5 起大文件路径核心）
+│   ├── table-export.ts         # exportTable 适配器（AntD/Element Plus 列描述符归一化）
+│   ├── echarts-export.ts       # exportEcharts 适配器（类目轴/饼图/散点数据子集）
 │   ├── worker-exporter.ts      # Worker 模式封装（主线程入口，产物名 worker-utils）
 │   ├── workers/
 │   │   └── export.worker.ts    # Worker 脚本（构建为 dist/export.worker.js）
@@ -608,10 +615,12 @@ packages/excel-exporter/
 │   ├── fallback.ts             # SheetJS 降级实现
 │   ├── download.ts             # Blob 下载工具（triggerDownload / toBlobPart）
 │   └── __tests__/
+│       ├── adapters.test.ts    # table-export / echarts-export 适配器
 │       ├── builder.test.ts     # workbook-builder 行列/表头/冻结/合并
 │       ├── fallback.test.ts    # SheetJS 降级产出可读回
 │       ├── format.test.ts      # applyFormat/displayValue/FormatSpec 各类型
 │       ├── performance.test.ts # 性能基准（1万/5万/10万 + format 开销）
+│       ├── phases.test.ts      # onPhase 阶段打点（init/build/download）
 │       ├── routing.test.ts     # pickMode 路由（main/worker/stream 阈值）
 │       ├── stream.test.ts      # exportAsStream 数据完整性
 │       └── setup.ts            # Node WASM 引导（initWasmSync）+ makeData / fourCols
@@ -628,7 +637,7 @@ packages/excel-exporter/
 ```json
 {
   "name": "@marcusok/excel-exporter",
-  "version": "0.1.2",
+  "version": "1.0.1",
   "type": "module",
   "description": "High-performance Excel export engine built on modern-xlsx (Rust + WASM).",
   "license": "MIT",
@@ -660,7 +669,8 @@ packages/excel-exporter/
     "./dist/export.worker.js": {
       "import": "./dist/export.worker.js",
       "default": "./dist/export.worker.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": ["dist", "README.md", "LICENSE"],
   "sideEffects": false,
@@ -691,9 +701,14 @@ packages/excel-exporter/
   "devDependencies": {
     "modern-xlsx": "1.2.0",
     "xlsx": "0.18.5"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3"
   }
 }
 ```
+
+> 📌 **v2.6 快照注**：`dependencies` 里的 `fflate` 是 v2.5 fast-xlsx 路径引入的**运行时依赖**（此前本包零运行时依赖）；`"./package.json"` 子路径导出供文档站等消费方在运行时读取版本号（0.3.0 起）。
 
 **设计要点**：
 
@@ -807,7 +822,7 @@ export interface CellStyle {
 /**
  * Worker-compatible, data-describing format spec. Functions cannot cross the
  * structured-clone boundary into a Web Worker, so worker/stream mode accepts
- * FormatSpec only. Function form works in `main` mode (browser <500 rows / Node).
+ * FormatSpec only. Function form works in `main` mode (browser <20,000 rows / Node).
  */
 export type FormatSpec =
   | { type: "enum"; map: Record<string, string>; fallback?: string }
@@ -1439,7 +1454,319 @@ function withAutoNumFormat(c: ColumnConfig): ColumnConfig {
 >
 > 📌 **整列数据样式已实现**（步骤 4b）：`sheetAddAoa` 批量写入后，遍历 `ws.rows` 直接改 `CellData.styleIndex`——纯 JS 属性赋值（O(N)，N = 行数），不经过 WASM 边界、不做 ref 解析。与 `ws.cell(ref).styleIndex = idx`（每次都要 A1 ref 解析 + 行/单元格查找）相比，跳过了热路径上最大的常数因子。5 万行单列赋值预计 < 10ms（以 `performance.test.ts` 实测为准）。如需多列样式，在外层 `forEach` 内对每列各调一次 `buildStyleIndex`（`StyleBuilder` 会去重合并到同一 `cellXfs` 表，不会重复注册）。
 
-### 4.8 流式构建器（`streaming-builder.ts`）— 大数据主路径（v1.9 重构）
+### 4.8 流式构建器（`streaming-builder.ts` + `fast-xlsx.ts`）— 大数据主路径（v1.9 重构；v2.5 起切换 fast-xlsx）
+
+> 🔄 **v2.6：现行实现快照（与顶部 v2.5 注记对应）**。大文件路径不再依赖 modern-xlsx 的 `StreamingXlsxWriter`：`streaming-builder.ts` 现在只是一层薄委托，实际由自研 `fast-xlsx.ts` 用 `fflate` 同步压缩一个 minimal OOXML 工作簿。要点：① **不需要 WASM**（4.10 的 `needsWasm` 判定因此把 stream 排除在外）；② 数据列 `style` 与 `headerStyle` 同样 warn 后丢弃（比旧实现多丢弃一类）；③ 以内存换吞吐——worksheet XML 在内存中一次拼装，适配 5–10 万行档位；④ 保持每 1000 行一次的 `onProgress` 节流。下方 StreamingXlsxWriter 版本保留为 v1.9–v2.0 历史记录。
+
+**现行源码**（`streaming-builder.ts`）：
+
+```ts
+import type { SheetConfig } from "./types";
+import { exportFastXlsx } from "./fast-xlsx";
+
+export interface StreamResult {
+  bytes: Uint8Array;
+  rowCount: number;
+}
+
+/**
+ * Streaming export -- the large-data path for >=50k rows.
+ *
+ * v1 does not support StyleBuilder/layout styles, matching the documented
+ * stream-mode contract. The fast writer assembles a valid minimal XLSX with
+ * fflate and keeps the 50k/100k exports well below the public SLAs.
+ */
+// Fast writer is synchronous internally; the async signature is kept for API
+// compatibility with the previous StreamingXlsxWriter implementation.
+// eslint-disable-next-line @typescript-eslint/require-await
+export async function exportAsStream(
+  sheets: SheetConfig[],
+  onProgress?: (p: number) => void,
+): Promise<StreamResult> {
+  return exportFastXlsx(sheets, onProgress);
+}
+```
+
+**现行源码**（`fast-xlsx.ts`）：
+
+```ts
+import { strToU8, zipSync } from "fflate";
+import type { SheetConfig } from "./types";
+import { displayValue, validateSheetName } from "./format-utils";
+
+const XML_DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+const MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+const CONTENT_NS =
+  "http://schemas.openxmlformats.org/package/2006/content-types";
+const REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
+const OFFICE_REL =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+
+const INVALID_XML_CHARS =
+  /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g;
+
+export interface FastXlsxResult {
+  bytes: Uint8Array;
+  rowCount: number;
+}
+
+interface SharedStringTable {
+  map: Map<string, number>;
+  parts: string[];
+  intern(value: string): number;
+}
+
+function createSharedStringTable(): SharedStringTable {
+  const map = new Map<string, number>();
+  const parts: string[] = [];
+  return {
+    map,
+    parts,
+    intern(value: string): number {
+      const existing = map.get(value);
+      if (existing !== undefined) return existing;
+      const index = map.size;
+      map.set(value, index);
+      parts.push(`<si><t xml:space="preserve">${escapeXml(value)}</t></si>`);
+      return index;
+    },
+  };
+}
+
+function sanitizeXml(value: string): string {
+  return value.replace(INVALID_XML_CHARS, "");
+}
+
+function escapeXml(value: string): string {
+  const v = sanitizeXml(value);
+  if (
+    v.indexOf("&") === -1 &&
+    v.indexOf("<") === -1 &&
+    v.indexOf(">") === -1 &&
+    v.indexOf('"') === -1 &&
+    v.indexOf("'") === -1
+  ) {
+    return v;
+  }
+  return v
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function columnName(index: number): string {
+  let n = index;
+  let name = "";
+  do {
+    name = String.fromCharCode(65 + (n % 26)) + name;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return name;
+}
+
+function stringifyCell(value: unknown): string | number | boolean {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (value == null) return "";
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "bigint") return value.toString();
+  return JSON.stringify(value);
+}
+
+function appendCell(
+  out: string[],
+  ref: string,
+  value: string | number | boolean,
+  intern: (value: string) => number,
+): void {
+  if (typeof value === "number") {
+    out.push(`<c r="${ref}" t="n"><v>${value}</v></c>`);
+    return;
+  }
+  if (typeof value === "boolean") {
+    out.push(`<c r="${ref}" t="b"><v>${value ? 1 : 0}</v></c>`);
+    return;
+  }
+  out.push(`<c r="${ref}" t="s"><v>${intern(value)}</v></c>`);
+}
+
+function buildWorksheetXml(
+  config: SheetConfig,
+  onProgress?: (progress: number) => void,
+  totalExpected?: number,
+  processedRows?: { count: number },
+  stringTable?: SharedStringTable,
+): string {
+  validateSheetName(config.name);
+  const cols = config.columns.map((c, i) => ({
+    col: c,
+    letter: columnName(i),
+  }));
+  const out: string[] = [];
+
+  // Header row.
+  out.push(`<row r="1">`);
+  for (const { col, letter } of cols) {
+    appendCell(out, `${letter}1`, stringifyCell(col.header), (value) =>
+      stringTable!.intern(value),
+    );
+  }
+  out.push(`</row>`);
+
+  for (let rowIndex = 0; rowIndex < config.data.length; rowIndex++) {
+    const item = config.data[rowIndex];
+    const rowNumber = rowIndex + 2;
+    out.push(`<row r="${rowNumber}">`);
+    for (const { col, letter } of cols) {
+      appendCell(
+        out,
+        `${letter}${rowNumber}`,
+        displayValue(col, item),
+        (value) => stringTable!.intern(value),
+      );
+    }
+    out.push(`</row>`);
+    processedRows!.count++;
+    if (onProgress && totalExpected && processedRows!.count % 1000 === 0) {
+      onProgress(processedRows!.count / totalExpected);
+    }
+  }
+
+  return (
+    XML_DECL +
+    `<worksheet xmlns="${MAIN_NS}"><sheetData>${out.join(
+      "",
+    )}</sheetData></worksheet>`
+  );
+}
+
+/**
+ * Fast, dependency-light XLSX writer for the large-data stream path.
+ *
+ * It intentionally trades streaming memory for throughput: the worksheet XML
+ * is assembled once in memory and zipped synchronously with fflate. That is
+ * the right trade for the supported 50k-100k+ export envelope and is what
+ * makes the public API hit its sub-second targets. For feature parity with the
+ * modern-xlsx stream path, layout/styling features are still skipped with the
+ * same warnings.
+ */
+export function exportFastXlsx(
+  sheets: SheetConfig[],
+  onProgress?: (progress: number) => void,
+): FastXlsxResult {
+  const totalExpected = sheets.reduce((sum, s) => sum + s.data.length, 0);
+  const processed = { count: 0 };
+  const worksheetXmls: string[] = [];
+  const workbookSheets: string[] = [];
+  const workbookRels: string[] = [];
+  const contentOverrides: string[] = [];
+  const stringTable = createSharedStringTable();
+
+  sheets.forEach((config, index) => {
+    const sheetNumber = index + 1;
+    const skipped: string[] = [];
+    if (config.columns.some((c) => c.width !== undefined))
+      skipped.push("width");
+    if (
+      config.headerStyle !== undefined ||
+      config.columns.some((c) => c.headerStyle !== undefined)
+    )
+      skipped.push("headerStyle");
+    // Data-cell styles are dropped just like layout features; warn so the
+    // degradation is visible instead of silent (headerStyle above already did).
+    if (config.columns.some((c) => c.style !== undefined))
+      skipped.push("style");
+    if (config.freezeRows) skipped.push("freezeRows");
+    if (config.autoFilter) skipped.push("autoFilter");
+    if (config.merges?.length) skipped.push("merges");
+    if (skipped.length) {
+      console.warn(
+        "[excel-exporter] stream mode: features not supported (" +
+          skipped.join(", ") +
+          ")",
+      );
+    }
+
+    worksheetXmls.push(
+      buildWorksheetXml(
+        config,
+        onProgress,
+        totalExpected,
+        processed,
+        stringTable,
+      ),
+    );
+    workbookSheets.push(
+      `<sheet name="${escapeXml(
+        config.name,
+      )}" sheetId="${sheetNumber}" r:id="rId${sheetNumber}"/>`,
+    );
+    workbookRels.push(
+      `<Relationship Id="rId${sheetNumber}" Type="${OFFICE_REL}/worksheet" Target="worksheets/sheet${sheetNumber}.xml"/>`,
+    );
+    contentOverrides.push(
+      `<Override PartName="/xl/worksheets/sheet${sheetNumber}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`,
+    );
+  });
+
+  const sharedStringsIndex = sheets.length + 1;
+  const hasSharedStrings = stringTable.parts.length > 0;
+  if (hasSharedStrings) {
+    workbookRels.push(
+      `<Relationship Id="rId${sharedStringsIndex}" Type="${OFFICE_REL}/sharedStrings" Target="sharedStrings.xml"/>`,
+    );
+    contentOverrides.push(
+      `<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>`,
+    );
+  }
+
+  const contentTypes =
+    XML_DECL +
+    `<Types xmlns="${CONTENT_NS}"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${contentOverrides.join(
+      "",
+    )}</Types>`;
+  const rootRels =
+    XML_DECL +
+    `<Relationships xmlns="${REL_NS}"><Relationship Id="rId1" Type="${OFFICE_REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+  const workbook =
+    XML_DECL +
+    `<workbook xmlns="${MAIN_NS}" xmlns:r="${OFFICE_REL}"><sheets>${workbookSheets.join(
+      "",
+    )}</sheets></workbook>`;
+  const workbookRelationships =
+    XML_DECL +
+    `<Relationships xmlns="${REL_NS}">${workbookRels.join("")}</Relationships>`;
+  const sharedStringsXml = hasSharedStrings
+    ? XML_DECL +
+      `<sst xmlns="${MAIN_NS}" count="${stringTable.parts.length}" uniqueCount="${stringTable.parts.length}">${stringTable.parts.join(
+        "",
+      )}</sst>`
+    : null;
+
+  const files: Record<string, Uint8Array> = {
+    "[Content_Types].xml": strToU8(contentTypes),
+    "_rels/.rels": strToU8(rootRels),
+    "xl/workbook.xml": strToU8(workbook),
+    "xl/_rels/workbook.xml.rels": strToU8(workbookRelationships),
+  };
+  worksheetXmls.forEach((xml, index) => {
+    files[`xl/worksheets/sheet${index + 1}.xml`] = strToU8(xml);
+  });
+  if (sharedStringsXml) {
+    files["xl/sharedStrings.xml"] = strToU8(sharedStringsXml);
+  }
+
+  const bytes = zipSync(files, { level: 1 });
+  onProgress?.(1);
+  return { bytes, rowCount: processed.count };
+}
+```
+
+---
+
+**【以下为历史实现（v1.9–v2.0，基于 modern-xlsx `StreamingXlsxWriter`；v2.5 起生产代码已不再使用，保留作设计推导记录】**
 
 > 🚨 **v1.9 地位升级**：stream 从 v1.8 的"无样式降级"升为 **≥5 万行的主路径**。原因见顶部 v1.9 摘要硬伤 1/2——`Workbook.toBuffer()` 在 ≥8 万行首次导出实测 17 秒（性能塌方），而 `StreamingXlsxWriter.finish()` 同规模实测 ~93ms（v2.0 修正，v1.9 误记为 3ms）。stream 全流程 10 万行独立进程实测 ~1,548ms，是达成 10 万行 <2000ms（首次）指标的**唯一可行路径**。
 
@@ -1542,7 +1869,7 @@ export async function exportAsStreamBlob(
 
 > 📌 **round-trip 正确性已验证**：stream 产出的 xlsx 经 `readBuffer` 读回，行数、表头、首末数据单元格全部一致（1000 行 / 50000 行两组用例 PASS）。stream 路径数据完整性可信。
 
-> 📌 **stream 必须在 Worker 内执行**：`finish()` 实测 ~90ms（v2.0 修正，v1.9 误记为 3ms），10 万行的 `writeRow` 循环（JS 层逐行构造 `StreamingCellInput[]`）约 1.45s，放主线程会阻塞。pickMode 对 ≥500 行一律丢进 Worker，stream 也不例外（见 4.9/4.10）。
+> 📌 **stream 必须在 Worker 内执行**：`finish()` 实测 ~90ms（v2.0 修正，v1.9 误记为 3ms），10 万行的 `writeRow` 循环（JS 层逐行构造 `StreamingCellInput[]`）约 1.45s，放主线程会阻塞。pickMode 对 ≥500 行一律丢进 Worker，stream 也不例外（见 4.9/4.10）。（v2.6 注：本条写于 `WORKER_THRESHOLD=500` 时代；现行阈值为 20,000，浏览器 ≥20,000 行进 Worker，Node 的 stream 在主线程执行——fast-xlsx 100k 约 0.8s，产品接受。）
 
 > 📌 **跨阈值的值语义差异（≤49,999 行 Workbook vs ≥50,000 行 stream）**：同一 `FormatSpec` 在两条路径产出的**单元格内部值不同**——`number` 在 Workbook 路径（`applyFormat`，见 4.7）保留全精度、靠 auto 注入的 `numFormat` 显示小数；在 stream 路径（`displayValue`，见 4.8）用 `Number(n.toFixed(decimals ?? 0))` 把小数**直接烤进值**（精度有损）。⚠️ **`decimals` 未指定时默认 0（最常踩的坑）**：`{type:'number'}`（不带 `decimals`）在 Workbook 路径仍存全精度（如 `9999.99`），但在 stream 路径会被 `toFixed(0)` **四舍五入到整数**（实测 `9999.99 → 10000`）——即 ≥5 万行导出时小数被静默丢弃。大数据 number 列务必显式写 `decimals`，否则跨阈值会出现精度不一致。`date`/`datetime` 在 Workbook 存日期序列（数字），在 stream 存格式化字符串。若同一列数据量跨阈值（如分批导出 4 万 vs 6 万行），下游按单元格类型/精度处理会观察到差异。源码见 `format-utils.ts` 的 `applyFormat` vs `displayValue`。
 
@@ -1555,6 +1882,8 @@ export async function exportAsStreamBlob(
 > - **Worker 内路由 Workbook/stream**：Worker 接到请求后，根据行数决定走 `WorkbookBuilder`（≤5万，带完整样式）还是 `exportAsStream`（≥5万，绕开 toBuffer 塌方）。
 
 **架构**：主线程 `postMessage(options)`（结构化克隆）→ Worker 内执行全部 WASM 工作（Workbook 或 stream）→ `postMessage(bytes, [bytes.buffer])` Transferable 零拷贝回传。
+
+> 🔄 **v2.6 快照说明**：以下两段已替换为现行源码。与 v2.4 及以前快照的差异（对应提交 12d47a4）：① Worker 脚本把 `initWasm` 门在 `mode !== "stream"` 下（Fast stream 不需要 WASM），并在实际初始化时上报 `init` 阶段耗时、构建完成时上报 `build` 阶段耗时；② 主线程封装的 `onerror` 不再复用坏 Worker——出错实例被 `terminate()` 并清空缓存引用（下次导出重建），且只 reject 派发给**该实例**的请求；③ `stripFunctionFormats` 同时剥离回调（`onProgress`/`onPhase` 不能跨结构化克隆，由主线程包装后转发）。
 
 **Worker 脚本**（`src/workers/export.worker.ts` → 构建为 `dist/export.worker.js`，见 4.3）：
 
@@ -1586,11 +1915,18 @@ let loadedWasmUrl: string | URL | undefined | null = null;
 self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
   const { id, options, wasmUrl, mode } = e.data;
   try {
-    if (loadedWasmUrl !== wasmUrl) {
+    if (mode !== "stream" && loadedWasmUrl !== wasmUrl) {
+      const initStart = performance.now();
       await initWasm(wasmUrl);
       loadedWasmUrl = wasmUrl;
+      (self as unknown as Worker).postMessage({
+        id,
+        phase: "init",
+        duration: performance.now() - initStart,
+      });
     }
 
+    const buildStart = performance.now();
     let bytes: Uint8Array;
     let rowCount: number;
 
@@ -1608,6 +1944,12 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       rowCount = options.sheets.reduce((sum, s) => sum + s.data.length, 0);
     }
 
+    (self as unknown as Worker).postMessage({
+      id,
+      phase: "build",
+      duration: performance.now() - buildStart,
+    });
+
     const resp: WorkerResponse = {
       id,
       ok: true,
@@ -1615,7 +1957,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       rowCount,
       engine: "modern-xlsx",
     };
-    (self as unknown as Worker).postMessage(resp, [bytes.buffer]); // Transferable 零拷贝
+    (self as unknown as Worker).postMessage(resp, [bytes.buffer]);
   } catch (err) {
     const resp: WorkerResponse = {
       id,
@@ -1640,7 +1982,10 @@ const XLSX_MIME =
 interface PendingEntry {
   resolve: (b: Uint8Array, rowCount: number) => void;
   reject: (e: Error) => void;
+  /** The worker instance this request was dispatched to (see onerror). */
+  worker: Worker;
   onProgress?: (progress: number) => void;
+  onPhase?: (phase: "init" | "build", durationMs: number) => void;
 }
 
 let worker: Worker | null = null;
@@ -1664,8 +2009,16 @@ interface WorkerProgressResponse {
   id: number;
   progress: number;
 }
+interface WorkerPhaseResponse {
+  id: number;
+  phase: "init" | "build";
+  duration: number;
+}
 type WorkerResponse =
-  WorkerOkResponse | WorkerErrResponse | WorkerProgressResponse;
+  | WorkerOkResponse
+  | WorkerErrResponse
+  | WorkerProgressResponse
+  | WorkerPhaseResponse;
 
 function getOrCreateWorker(): Worker {
   if (worker) return worker;
@@ -1675,7 +2028,7 @@ function getOrCreateWorker(): Worker {
       '[excel-exporter] workerUrl not configured. Call configureWasm({ workerUrl: "..." }) to point at export.worker.js (see README).',
     );
   }
-  worker = new Worker(workerUrl, { type: "module" });
+  const w = (worker = new Worker(workerUrl, { type: "module" }));
   // Single onmessage handler registered once, dispatches by id.
   worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
     const data = e.data;
@@ -1686,6 +2039,10 @@ function getOrCreateWorker(): Worker {
       p.onProgress?.(data.progress);
       return;
     }
+    if ("phase" in data) {
+      p.onPhase?.(data.phase, data.duration);
+      return;
+    }
     pending.delete(data.id);
     if (data.ok && data.bytes) p.resolve(data.bytes, data.rowCount);
     else
@@ -1693,17 +2050,30 @@ function getOrCreateWorker(): Worker {
         new Error((data as WorkerErrResponse).error ?? "worker unknown error"),
       );
   };
-  worker.onerror = (err) => {
-    for (const [, p] of pending) p.reject(new Error(err.message));
-    pending.clear();
+  // A worker that errored (e.g. script failed to load) must not be reused:
+  // terminate it and drop the cached reference so the next export creates a
+  // fresh one, instead of failing forever into the SheetJS fallback. Only the
+  // requests dispatched to THIS worker are rejected -- a replacement worker
+  // may already be serving newer request ids.
+  w.onerror = (err) => {
+    if (worker === w) {
+      w.terminate();
+      worker = null;
+    }
+    for (const [id, p] of pending) {
+      if (p.worker !== w) continue;
+      pending.delete(id);
+      p.reject(new Error(err.message || "worker error"));
+    }
   };
-  return worker;
+  return w;
 }
 
 /** Strip function-form format before structured clone (functions cannot be cloned). */
 function stripFunctionFormats(options: ExportOptions): ExportOptions {
+  const { onProgress: _onProgress, onPhase: _onPhase, ...rest } = options;
   return {
-    ...options,
+    ...rest,
     sheets: options.sheets.map((s) => ({
       ...s,
       columns: s.columns.map((c) => {
@@ -1740,6 +2110,7 @@ export async function exportInWorker(
           );
         }, timeoutMs);
         pending.set(id, {
+          worker: w,
           resolve: (b: Uint8Array, rc: number) => {
             clearTimeout(timer);
             resolve([b, rc]);
@@ -1749,6 +2120,7 @@ export async function exportInWorker(
             reject(e);
           },
           onProgress: options.onProgress,
+          onPhase: (phase, duration) => options.onPhase?.(phase, duration),
         });
         w.postMessage({
           id,
@@ -1811,10 +2183,17 @@ import { exportInWorker } from "./worker-exporter";
 import { exportWithSheetJS } from "./fallback";
 import { triggerDownload, toBlobPart } from "./download";
 import { getWasmLoader } from "./wasm-loader";
+import { tableExportToOptions, type TableExportOptions } from "./table-export";
+import {
+  echartsExportToOptions,
+  type EChartsExportOptions,
+} from "./echarts-export";
 
 export * from "./types";
 export * from "./style-presets";
 export * from "./format-utils";
+export * from "./table-export";
+export * from "./echarts-export";
 export { configureWasm, getWasmLoader } from "./wasm-loader";
 export { WorkbookBuilder } from "./workbook-builder";
 export { exportAsStream } from "./streaming-builder";
@@ -1822,14 +2201,14 @@ export { exportAsStream } from "./streaming-builder";
 const XLSX_MIME =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const STREAM_THRESHOLD = 50_000; // Workbook.toBuffer cliff starts ~55k rows
-const WORKER_THRESHOLD = 500; // main-mode sync work is acceptable only below this
+const WORKER_THRESHOLD = 20_000; // main-mode sync work is acceptable below this
 
 type PickedMode = { mode: ExportMode; workerMode?: "workbook" | "stream" };
 
 /**
  * Auto mode selection (verified against independent-process benchmarks).
- * - main fully blocks the thread; only for Node/SSR or browser <500 rows.
- * - browser >=500 rows go to a worker (main thread does one structured clone).
+ * - main fully blocks the thread; only for Node/SSR or browser <20,000 rows.
+ * - browser >=20,000 rows go to a worker (main thread does one structured clone).
  * - inside the worker, >=50k rows use stream (avoids the toBuffer cliff).
  */
 function pickMode(options: ExportOptions, totalRows: number): PickedMode {
@@ -1893,12 +2272,12 @@ export async function exportExcel(
   const start = performance.now();
   const totalRows = options.sheets.reduce((s, sh) => s + sh.data.length, 0);
 
+  const picked = pickMode(options, totalRows);
+  const needsWasm = picked.workerMode !== "stream";
   const loader = getWasmLoader();
-  if (!loader.supported) {
+  if (needsWasm && !loader.supported) {
     return exportWithSheetJS(options, start, "WebAssembly not supported");
   }
-
-  const picked = pickMode(options, totalRows);
 
   // Node main/stream: execute directly on this thread (no Web Worker available).
   if (
@@ -1906,38 +2285,58 @@ export async function exportExcel(
     (picked.mode === "stream" && typeof window === "undefined")
   ) {
     try {
-      await loader.ensureLoaded();
+      if (needsWasm) {
+        const initStart = performance.now();
+        await loader.ensureLoaded();
+        options.onPhase?.("init", performance.now() - initStart);
+      } else {
+        // Fast stream does not use WASM; report an empty init phase so the
+        // public phase sequence remains stable across main/stream routes.
+        options.onPhase?.("init", 0);
+      }
       options.onProgress?.(0);
       let result: ExportResult;
-      if (picked.workerMode === "stream") {
-        const { bytes, rowCount } = await exportAsStream(
-          options.sheets,
-          options.onProgress,
-        );
-        result = {
-          success: true,
-          blob: new Blob([toBlobPart(bytes)], { type: XLSX_MIME }),
-          engine: "modern-xlsx",
-          mode: "stream",
-          duration: performance.now() - start,
-          rowCount,
-        };
-      } else {
-        const builder = await WorkbookBuilder.create();
-        options.sheets.forEach((s) => builder.addSheet(s));
-        const bytes = await builder.toBuffer();
-        result = {
-          success: true,
-          blob: new Blob([toBlobPart(bytes)], { type: XLSX_MIME }),
-          engine: "modern-xlsx",
-          mode: "main",
-          duration: performance.now() - start,
-          rowCount: totalRows,
-        };
+      const buildStart = performance.now();
+      try {
+        if (picked.workerMode === "stream") {
+          const { bytes, rowCount } = await exportAsStream(
+            options.sheets,
+            options.onProgress,
+          );
+          result = {
+            success: true,
+            blob: new Blob([toBlobPart(bytes)], { type: XLSX_MIME }),
+            engine: "modern-xlsx",
+            mode: "stream",
+            duration: performance.now() - start,
+            rowCount,
+          };
+        } else {
+          const builder = await WorkbookBuilder.create();
+          options.sheets.forEach((s) => builder.addSheet(s));
+          const bytes = await builder.toBuffer();
+          result = {
+            success: true,
+            blob: new Blob([toBlobPart(bytes)], { type: XLSX_MIME }),
+            engine: "modern-xlsx",
+            mode: "main",
+            duration: performance.now() - start,
+            rowCount: totalRows,
+          };
+        }
+      } finally {
+        // Reported even when the build throws, so a failed attempt that falls
+        // back to SheetJS still shows how long it spent before failing.
+        options.onPhase?.("build", performance.now() - buildStart);
       }
       options.onProgress?.(1);
-      if (options.download !== false)
+      // Node has no document: triggerDownload would be a no-op, so neither the
+      // click nor the "download" phase is reported (matches ExportPhase docs).
+      if (options.download !== false && typeof document !== "undefined") {
+        const downloadStart = performance.now();
         triggerDownload(result.blob!, options.filename);
+        options.onPhase?.("download", performance.now() - downloadStart);
+      }
       return result;
     } catch (e) {
       return exportWithSheetJS(options, start, (e as Error).message);
@@ -1950,8 +2349,11 @@ export async function exportExcel(
     const result = await exportInWorker(options, picked.workerMode!);
     options.onProgress?.(1);
     if (result.success) {
-      if (options.download !== false)
+      if (options.download !== false) {
+        const downloadStart = performance.now();
         triggerDownload(result.blob!, options.filename);
+        options.onPhase?.("download", performance.now() - downloadStart);
+      }
       return result;
     }
     // Worker export failed (e.g. WASM init error inside the worker) -> degrade
@@ -1965,14 +2367,42 @@ export async function exportExcel(
     return exportWithSheetJS(options, start, (e as Error).message);
   }
 }
+
+/**
+ * Convenience wrapper for common table data shapes.
+ *
+ * Accepts Ant Design-style (`title` / `dataIndex`) and Element Plus-style
+ * (`label` / `prop`) column descriptors, normalizes them to `SheetConfig`,
+ * and delegates to {@link exportExcel}.
+ */
+export async function exportTable(
+  options: TableExportOptions,
+): Promise<ExportResult> {
+  return exportExcel(tableExportToOptions(options));
+}
+
+/**
+ * Convenience wrapper for a small, explicit subset of ECharts options.
+ *
+ * Supports category-axis series data, pie-like name/value data, and
+ * scatter-like coordinate pairs. Unsupported `dataset` mode throws instead of
+ * guessing.
+ */
+export async function exportEcharts(
+  options: EChartsExportOptions,
+): Promise<ExportResult> {
+  return exportExcel(echartsExportToOptions(options));
+}
 ````
+
+> 🔄 **v2.6 快照说明**：以上已整体替换为 `src/index.ts` 现行源码（提交 0c0fbd5 调整 `WORKER_THRESHOLD` 500 → 20_000 起）。与 v2.4 及以前快照的差异：① `WORKER_THRESHOLD = 20_000`——浏览器 auto 1 万行现走 **main**（不再是 worker）；② WASM 能力检测改为 `needsWasm = workerMode !== "stream"`——**Fast stream 路径不需要 WASM**，不支持 WebAssembly 的浏览器 ≥5 万行仍可正常导出（engine 为 `modern-xlsx`），不再一律降级 SheetJS；③ 新增 `onPhase` 阶段打点（`init`/`build`/`download`，Node 下不报 `download`）与 build 失败也上报的 `finally` 语义；④ 新增 `exportTable` / `exportEcharts` 便捷适配器。
 
 > 📌 **v1.9 pickMode 与 v1.8 的关键差异**：
 >
 > - **stream 阈值 10万 → 5万**：v1.8 认为 toBuffer 在 10 万行"热状态"744ms，把 stream 留到 10 万；v1.9 实测发现 8 万行首次塌方到 8 秒，5 万行（648ms）是 Workbook 路径的保守安全上限。
 > - **stream 不再要求"无列样式"**：v1.8 把 stream 限制为纯数据（因为觉得带样式必须走 Workbook）；v1.9 修正为——性能优先，≥5 万行一律 stream（样式用 setStylesXml 有限支持，Phase 2 增强）。带复杂样式的大数据是已知取舍，非 bug。
 > - **worker 模式内部分流**：v1.8 的 worker 只走 Workbook；v1.9 的 worker 按 workerMode 走 Workbook 或 stream，把 toBuffer 塌方挡在 Worker 内（不阻塞主线程）。
-> - **workerUrl 缺失时的降级行为（v2.2 纠正：如实描述当前实现，原句"回退 main"是 v1.9 散文遗留错误）**：`pickMode` 只检测 `typeof Worker !== "undefined" && typeof window !== "undefined"` 来决定是否走 worker，**不检查 `workerUrl` 是否已配**（`index.ts` 的 `pickMode`）。因此浏览器里忘配 `workerUrl` 且 ≥500 行时，请求进入 worker 分支，`worker-exporter.ts` 的 `getOrCreateWorker()` 因 `workerUrl` 为空抛错，`exportInWorker` catch 后返回 `{success:false}`，`index.ts` 的 worker 分支随即 `return exportWithSheetJS(...)` 降级到 SheetJS（**丢样式**）。也就是说：`pickMode` 返回 worker 但 worker 实际不可用时，当前实现**直接降级 SheetJS，并不回退 main**（与 v1.8 行为一致，并非上方"v1.9"标签所写的"先回退 main 保样式"——那是与代码不符的遗留描述）。如希望 `workerUrl` 缺失时回退 main 模式（保留样式、接受主线程阻塞），需在 `pickMode`（提前检测 `workerUrl`）或 `exportInWorker` 失败分支（改走 `WorkbookBuilder` 主线程路径）增加显式判断——列为可选改进，当前未实现。
+> - **workerUrl 缺失时的降级行为（v2.2 纠正：如实描述当前实现，原句"回退 main"是 v1.9 散文遗留错误）**：`pickMode` 只检测 `typeof Worker !== "undefined" && typeof window !== "undefined"` 来决定是否走 worker，**不检查 `workerUrl` 是否已配**（`index.ts` 的 `pickMode`）。因此浏览器里忘配 `workerUrl` 且 ≥20,000 行时，请求进入 worker 分支，`worker-exporter.ts` 的 `getOrCreateWorker()` 因 `workerUrl` 为空抛错，`exportInWorker` catch 后返回 `{success:false}`，`index.ts` 的 worker 分支随即 `return exportWithSheetJS(...)` 降级到 SheetJS（**丢样式**）。也就是说：`pickMode` 返回 worker 但 worker 实际不可用时，当前实现**直接降级 SheetJS，并不回退 main**（与 v1.8 行为一致，并非上方"v1.9"标签所写的"先回退 main 保样式"——那是与代码不符的遗留描述）。如希望 `workerUrl` 缺失时回退 main 模式（保留样式、接受主线程阻塞），需在 `pickMode`（提前检测 `workerUrl`）或 `exportInWorker` 失败分支（改走 `WorkbookBuilder` 主线程路径）增加显式判断——列为可选改进，当前未实现。
 
 ### 4.11 预设样式（`style-presets.ts`）
 
@@ -2237,29 +2667,31 @@ if ("requestIdleCallback" in window) {
 >
 > 三种策略，按场景选：
 >
-> 1. **不预热主线程**（推荐用于「导出基本都走 Worker」的 App）：删掉上面 `requestIdleCallback` 块，主线程永不初始化 WASM，省一份编译成本；`exportExcel` 的 `main` 模式（<500 行）仍能用，但首次会付一次主线程 init 成本（可接受，因为小数据量）。
+> 1. **不预热主线程**（推荐用于「导出基本都走 Worker」的 App）：删掉上面 `requestIdleCallback` 块，主线程永不初始化 WASM，省一份编译成本；`exportExcel` 的 `main` 模式（<20,000 行）仍能用，但首次会付一次主线程 init 成本（可接受，因为小数据量）。
 > 2. **预热主线程 + Worker 预热**：在 `requestIdleCallback` 里同时 `postMessage` 一个 `init` 消息给 Worker（需在 `worker-exporter.ts` 增加 `init` 消息分支，调 `initWasm`），让两个线程都在空闲期完成编译，避免首次导出时的编译尖峰。
 > 3. **保持现状（仅预热主线程）**：最简单，但首次 Worker 导出会有一次 Worker 内编译耗时（~50-150ms，含在 Worker 端到端耗时内，不影响主线程阻塞预算）。
 >
 > 默认采用策略 3（简单），若 7.3 实测发现首次 Worker 导出端到端超预算，切策略 2。
 
-### 5.3 模式自动调度（v2.0 重写，对齐 4.10 pickMode）
+### 5.3 模式自动调度（v2.0 重写，对齐 4.10 pickMode；v2.6 阈值对齐）
 
 > ⚠️ **v2.0 修正**：v1.9 的 5.3 是 v1.8 残留——用 10 万行阈值 + "结构化克隆入向"（v1.9 已删除 flat-encoder，称其为"硬伤 3"），与 4.10 pickMode（5 万行阈值 + 结构化克隆）直接冲突。照 5.3 实现会 reintroduce 已确认的数据损坏缺陷。v2.0 重写本表，与 4.10 完全一致。
+>
+> ⚠️ **v2.6 修正**：Worker 阈值随源码更新为 20,000（提交 0c0fbd5），下表已按现行 `pickMode` 修正浏览器 <20,000 / 20,000–49,999 的分档；v2.0 原表分档为 500。
 
-| 数据量          | 运行环境     | auto 模式路由 | workerMode | 理由（v2.0，基于二次实测）                                                                                                                                                                                                 |
-| --------------- | ------------ | ------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| < 500 行        | 浏览器/Node  | **main**      | —          | 实测 <500 行 main <15ms，主线程可接受                                                                                                                                                                                      |
-| 500 – 49,999 行 | **浏览器**   | **worker**    | workbook   | Workbook 路径支持完整 StyleBuilder 样式；5万行实测 ~648ms 达标（<700ms）。入向结构化克隆 5万行 46ms                                                                                                                        |
-| 500 – 49,999 行 | **Node/SSR** | **main**      | —          | Node 无 Web Worker，只能 main（接受阻塞，SSR 场景无交互预算约束）                                                                                                                                                          |
-| ≥ 50,000 行     | **浏览器**   | **worker**    | **stream** | Workbook 路径 toBuffer 在 ≥5.5万行开始超线性塌方（6万 1.6s / 8万 7.6s / 10万 17.5s）。stream 全流程 10万行实测 1,548ms 达标（<2000ms）。stream v1 不支持 StyleBuilder，需样式的大数据走 Phase 2 的 buildStylesXmlForStream |
-| ≥ 50,000 行     | **Node/SSR** | **stream**    | stream     | 同上，Node 直接主线程跑 stream（writeRow 循环不依赖 Worker）                                                                                                                                                               |
+| 数据量             | 运行环境     | auto 模式路由 | workerMode | 理由（v2.0 二次实测；v2.6 阈值）                                                                                                                                                                           |
+| ------------------ | ------------ | ------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| < 20,000 行        | **浏览器**   | **main**      | —          | 10k×4 列 main 实测 ~117ms（1万 10列 263ms），主线程短阻塞可接受（产品决策，见 1.2 v2.6 注）                                                                                                                |
+| < 50,000 行        | **Node/SSR** | **main**      | —          | Node 无 Web Worker，只能 main（接受阻塞，SSR 场景无交互预算约束）                                                                                                                                          |
+| 20,000 – 49,999 行 | **浏览器**   | **worker**    | workbook   | Workbook 路径支持完整 StyleBuilder 样式；5万行实测 ~648ms 达标（<700ms）。入向结构化克隆 5万行 46ms                                                                                                        |
+| ≥ 50,000 行        | **浏览器**   | **worker**    | **stream** | Workbook 路径 toBuffer 在 ≥5.5万行开始超线性塌方（6万 1.6s / 8万 7.6s / 10万 17.5s）。Fast stream（fast-xlsx）全流程 10万行实测 ~762ms 达标（<1000ms）。stream v1 不支持样式，需样式的大数据拆分或接受降级 |
+| ≥ 50,000 行        | **Node/SSR** | **stream**    | stream     | 同上，Node 直接主线程跑 stream（fast-xlsx 不依赖 Worker 与 WASM）                                                                                                                                          |
 
 > 📌 **stream 阈值从 10 万降到 5 万**（v1.9 确立，v2.0 确认）：toBuffer 塌方起始点在 5.5–6 万行（实测 6万 1.6s 已超线性）。5 万是 Workbook 路径的保守安全上限（实测 ~648ms）。≥5 万行一律走 stream，彻底避开塌方边界的不确定性。
 >
-> 📌 **stream 的样式限制（已知取舍）**：`StreamingXlsxWriter` 不支持 `StyleBuilder` 链式样式（只接受 `StreamingCellInput.style` 数字索引，需配合 `setStylesXml`）。v1 的 stream 路径只支持纯数据 + 最小默认样式，且 `width`/`freezeRows`/`autoFilter`/`merges` 等 `SheetConfig` 布局字段在 stream 模式下仅 `console.warn` 后丢弃（`StreamingXlsxWriter` 无对应 API，见 4.8 源码）。需要完整样式的大数据导出（≥5万行）在 Phase 1 暂不支持，业务侧需：① 拆分为 <5 万行（≤49,999）/文件走 Workbook；② 或接受纯数据；③ 或等 Phase 2 的 `buildStylesXmlForStream()`。这是工程取舍，非 bug。
+> 📌 **stream 的样式限制（已知取舍；v2.6 注）**：现行 fast-xlsx 完全不产出样式（连 `style`/`headerStyle` 数据列样式也 warn 后丢弃）；v2.0 时代的 `StreamingXlsxWriter` 也只接受 `StreamingCellInput.style` 数字索引（需配合 `setStylesXml`）。v1 的 stream 路径只支持纯数据，且 `width`/`freezeRows`/`autoFilter`/`merges` 等 `SheetConfig` 布局字段在 stream 模式下仅 `console.warn` 后丢弃（见 4.8 现行源码的 skipped 清单）。需要完整样式的大数据导出（≥5万行）在 Phase 1 暂不支持，业务侧需：① 拆分为 <5 万行（≤49,999）/文件走 Workbook；② 或接受纯数据。这是工程取舍，非 bug。
 >
-> 📌 **Worker 阈值 500 行**：main 模式 1万行10列实测 263ms 全阻塞（toBuffer 占 200ms）。500 行以下 main 可接受（<15ms），以上一律 worker。阈值可由调用方通过 `mode` 显式覆盖。
+> 📌 **Worker 阈值 20,000 行（v2.6 对齐源码）**：main 模式 1万行4列实测 ~117ms、1万行10列 263ms 全阻塞（toBuffer 占大头）。现行产品决策为 <20,000 行接受主线程短阻塞、≥20,000 行进 Worker（提交 0c0fbd5，v1.8 时代曾为 500）。阈值可由调用方通过 `mode` 显式覆盖。
 
 ### 5.4 降级链路
 
@@ -2273,8 +2705,8 @@ WASM 加载失败 ─┘
 
 ### 5.5 内存控制
 
-- 流式模式（`StreamingXlsxWriter`）逐行写入，内存占用与行数无关。
-- v1.9 修正（推翻 v1.8 的扁平化方案）：worker 模式下主线程只做一次 **结构化克隆** `postMessage(options)`（实测 10万行 94ms，非 v1.8 谎报的 163ms）。v1.8 的 `encodeFlat` 已删除——它在混合类型列静默损坏数据（硬伤 3），且省下的 81ms 在 toBuffer 17 秒塌方面前占比 0.5%（硬伤 5）。全部 WASM 工作（Workbook 构造/stream writeRow + toBuffer/finish）在 Worker 线程执行，结果 `Uint8Array` 通过 Transferable 零拷贝回传。大数据量（≥5万行）Worker 内走 stream（`finish()` ~90ms），绕开 `Workbook.toBuffer()` 的 ≥8 万行塌方（见硬伤 1）。
+- 流式模式（v2.6 注：现行 `fast-xlsx`）以内存换吞吐——worksheet XML 在内存中一次拼装后用 fflate 同步压缩，内存占用随行数线性增长，但常数小、适配 5–10 万行档位（v2.0 时代的 `StreamingXlsxWriter` 为逐行写入、内存与行数无关，见 4.8 历史记录）。
+- v1.9 修正（推翻 v1.8 的扁平化方案）：worker 模式下主线程只做一次 **结构化克隆** `postMessage(options)`（实测 10万行 94ms，非 v1.8 谎报的 163ms）。v1.8 的 `encodeFlat` 已删除——它在混合类型列静默损坏数据（硬伤 3），且省下的 81ms 在 toBuffer 17 秒塌方面前占比 0.5%（硬伤 5）。全部核心工作（Workbook 构造/fast-xlsx 拼装压缩）在 Worker 线程执行，结果 `Uint8Array` 通过 Transferable 零拷贝回传。大数据量（≥5万行）Worker 内走 stream（fast-xlsx 10万行 ~0.8s），绕开 `Workbook.toBuffer()` 的 ≥8 万行塌方（见硬伤 1）。
 - 调用方传入的 `data` 应避免在导出前做无谓的 `map` 拷贝；`format` 函数应保持轻量。
 
 ### 5.6 缓存与单例
@@ -2367,7 +2799,7 @@ configureWasm({
 
 ### 6.3 典型调用
 
-> ⚠️ **v2.0 提示**：8 万行会走 worker + stream（≥5 万行阈值，见 4.10/5.3）。stream 路径 v1 不支持 StyleBuilder 样式，故本例中的 style 和 format 在 8 万行场景下实际不生效。若需带样式，请将数据量控制在 <5 万行（≤49,999 行，走 Workbook）。以下示例改用 FormatSpec（worker 兼容）而非函数形式。
+> ⚠️ **v2.0 提示**：8 万行会走 worker + stream（≥5 万行阈值，见 4.10/5.3）。stream 路径 v1 不支持 StyleBuilder 样式，故本例中的 style 和 format 在 8 万行场景下实际不生效。若需带样式，请将数据量控制在 <5 万行（≤49,999 行，走 Workbook）。以下示例改用 FormatSpec（worker 兼容）而非函数形式。
 
 ```ts
 import {
@@ -2424,7 +2856,7 @@ await exportExcel({
 });
 ```
 
-> 📌 **format 两种形式的适用场景**：函数形式 format: (v) => ... 仅在 mode: 'main'（浏览器 <500 行或 Node）有效；worker 模式会被剥离（见 4.9）。需要 worker 兼容时用 FormatSpec 对象。需要复杂逻辑时，在导出前自行预处理 data。
+> 📌 **format 两种形式的适用场景（v2.6 阈值对齐）**：函数形式 format: (v) => ... 在浏览器 main 路径（auto <20,000 行）与 Node（main / stream 主线程执行）有效；浏览器 worker 路径（auto ≥20,000 行或显式 worker/stream）会被剥离并 warn（见 4.9）。需要 worker 兼容时用 FormatSpec 对象。需要复杂逻辑时，在导出前自行预处理 data。
 
 ---
 
@@ -2441,23 +2873,23 @@ await exportExcel({
 
 ### 7.2 性能基准测试（关键验收）
 
-`src/__tests__/performance.test.ts`，在 CI 上跑（Node 22，单线程）。**本套件只测 WASM-core 回归下限，不替代 7.3 的浏览器端到端验收**（见下方「测什么 / 不测什么」说明）：
+`src/__tests__/performance.test.ts`，**本地**回归看门狗（Node 22，单线程；CI 以 `RUN_PERF=0` 跳过，因 shared runner 抖动大）。**本套件只测 WASM-core/fast-writer 回归下限，不替代 7.3 的浏览器端到端验收**（见下方「测什么 / 不测什么」说明）：
 
-> 📌 **测什么 / 不测什么（S3 修正，与 1.2 验收表、4.10 pickMode 对齐）**：
+> 📌 **测什么 / 不测什么（v2.6 修订，与 1.2 验收表、4.10 pickMode 对齐）**：
 >
-> - **1 万行 / 5 万行 / 10 万行同口径**：三者行数均 ≥ `WORKER_THRESHOLD`(500)，**浏览器生产路径都是 worker**（见 4.10 pickMode / 5.3）——不是 main。Node 套件因 Node 无浏览器 `Worker` 全局（`typeof Worker`/`typeof window` 任一为 `undefined`），显式对 1万/5万行跑 `mode:'main'`（测 Workbook 路径回归；注意 5万行因 `STREAM_THRESHOLD=50_000` 用 `>=`、Node auto 本会切 stream，此处套件显式用 main 以测 Workbook 回归下限）、对 10万行跑 `mode:'stream'`（测 stream 路径回归），测的均是 **WASM-core 工作量回归下限**，**不等于** worker 端到端（后者还叠加入向结构化克隆 1万 9ms / 5万 46ms / 10万 94ms + Worker 启动 + WASM 首次编译 + 出向 Transferable 回传，见附录 A）。
-> - **三档的真正端到端验收（worker 端到端耗时 + 主线程阻塞预算）只能在 7.3 Playwright 进行**（当前未实现）。早期版本误把 1 万行的 `mode:'main'` 当作"生产路径/正式验收"——但 1 万行 ≥500，浏览器里走 worker，与 5 万行同口径，不能单列。Node 套件守"WASM-core 不退化"，Playwright 套件守"端到端达标"，两者缺一不可（见下方一句话总结）。
-> - 一句话：**Node 套件守"WASM-core 不退化"，Playwright 套件守"端到端 + 主线程预算达标"**。两者缺一不可。
+> - **现行口径**：三档均用 `mode:'auto'`。Node 无浏览器 `Worker` 全局（`typeof Worker`/`typeof window` 任一为 `undefined`），auto 在 Node 解析为：<50,000 行 main（1 万行档，测 Workbook 回归）、≥50,000 行 stream（5 万/10 万行档，断言 `r.mode === "stream"`，测 fast-xlsx 回归）。**浏览器现行路由与旧口径不同**：`WORKER_THRESHOLD=20_000`（v2.6 对齐，提交 0c0fbd5），浏览器 1 万行 auto 走 **main**、5 万/10 万行走 worker——Node 数字作为 worker 内等价工作的代理依据，但 worker 端到端还叠加入向结构化克隆（1万 9ms / 5万 46ms / 10万 94ms）+ Worker 启动 + WASM 首次编译 + 出向 Transferable 回传，**从未实测**，属 7.3 Playwright 计划（当前未实现）。
+> - **三档的真正端到端验收（worker 端到端耗时 + 主线程阻塞预算）只能在 7.3 Playwright 进行**（当前未实现）。Node 套件守"core 不退化"，Playwright 套件守"端到端达标"，两者缺一不可（见下方一句话总结）。
+> - 一句话：**Node 套件守"core 不退化"，Playwright 套件守"端到端 + 主线程预算达标"**。两者缺一不可。
 
 ```ts
 import { describe, it, expect, beforeAll } from "vitest";
 import { exportExcel } from "../index";
 import { makeData, fourCols } from "./setup";
 
-// CI shared runners have variance: 1.5x slack by default, 1.0x when PERF_TIGHT=1.
-// GitHub Actions ubuntu runners are ~1.5-2x slower than a dev desktop for
-// CPU/WASM work; 1.5x keeps the regression guard useful without flaking on CI.
-const SLACK = Number(process.env.PERF_TIGHT ?? 0) > 0 ? 1.0 : 1.5;
+// CI skips these tests (RUN_PERF=0), so the local threshold is exactly the
+// product SLA. Keep PERF_TIGHT for CI/local overrides if a future pipeline
+// decides to run them on shared hardware.
+const SLACK = Number(process.env.PERF_TIGHT ?? 1) > 0 ? 1.0 : 1.0;
 
 // Perf 基线只在本地当回归看门狗；CI shared runner 抖动大，跑它只会 flake。
 // 本地默认跑；设 RUN_PERF=0 跳过（CI 里用）。
@@ -2482,48 +2914,48 @@ describe.runIf(RUN_PERF)(
       });
     });
 
-    it("10k rows x 4 cols (main) < 200ms", async () => {
+    it("10k rows x 4 cols (auto) < 200ms", async () => {
+      const data = makeData(10_000);
       const t0 = performance.now();
       const r = await exportExcel({
         filename: "p10k",
         download: false,
-        mode: "main",
-        sheets: [{ name: "s", columns: fourCols, data: makeData(10_000) }],
+        mode: "auto",
+        sheets: [{ name: "s", columns: fourCols, data }],
       });
       const dt = performance.now() - t0;
       expect(r.success).toBe(true);
-      // Verified baseline: ~120-130ms (Node vitest single-process, warmed by beforeAll; cf. 109ms median / 113-119ms range for independent-process first in 1.2 & Appendix A). 200ms gives headroom.
       expect(dt).toBeLessThan(200 * SLACK);
     });
 
-    it("50k rows x 4 cols (main) < 1000ms", async () => {
+    it("50k rows x 4 cols (auto) < 500ms", async () => {
+      const data = makeData(50_000);
       const t0 = performance.now();
       const r = await exportExcel({
         filename: "p50k",
         download: false,
-        mode: "main",
-        sheets: [{ name: "s", columns: fourCols, data: makeData(50_000) }],
+        mode: "auto",
+        sheets: [{ name: "s", columns: fourCols, data }],
       });
       const dt = performance.now() - t0;
       expect(r.success).toBe(true);
-      // Verified baseline: ~565ms fast desktop / ~830ms documented first-process.
-      // The old 700ms base sat BELOW the documented baseline and flaked on CI.
-      // Base 1000ms with 1.5x default slack => 1500ms, safe on shared runners.
-      expect(dt).toBeLessThan(1000 * SLACK);
+      expect(r.mode).toBe("stream");
+      expect(dt).toBeLessThan(500 * SLACK);
     });
 
-    it("100k rows x 4 cols (stream) < 2000ms", async () => {
+    it("100k rows x 4 cols (auto) < 1000ms", async () => {
+      const data = makeData(100_000);
       const t0 = performance.now();
       const r = await exportExcel({
         filename: "p100k",
         download: false,
-        mode: "stream",
-        sheets: [{ name: "s", columns: fourCols, data: makeData(100_000) }],
+        mode: "auto",
+        sheets: [{ name: "s", columns: fourCols, data }],
       });
       const dt = performance.now() - t0;
       expect(r.success).toBe(true);
-      // Verified baseline: ~1630ms. 2000ms with slack is comfortable.
-      expect(dt).toBeLessThan(2000 * SLACK);
+      expect(r.mode).toBe("stream");
+      expect(dt).toBeLessThan(1000 * SLACK);
     });
 
     it("format function overhead does not dominate", async () => {
@@ -2570,9 +3002,9 @@ describe.runIf(RUN_PERF)(
 // cache (documented 28x first/hot gap). The 50k stream threshold is conservative.
 ```
 
-> 📌 **容差与 flaky**：CI 共享 Runner 性能波动大，默认给所有阈值 1.5x 容差；正式验收时设 `PERF_TIGHT=1` 走严格阈值。`beforeAll` 的预热避免把 `initWasm()` 的编译耗时计入首个 case——否则首个 case 会无端超阈值 100ms+。
+> 📌 **容差（v2.6 对齐源码）**：`SLACK` 恒为 1.0——本地阈值即产品 SLA 本身（10k <200ms / 50k <500ms / 100k <1000ms）。历史版本的「默认 1.5x、`PERF_TIGHT=1` 收紧到 1.0x」机制已随 CI 跳过策略移除（`PERF_TIGHT` 现无效果，保留读取仅为兼容）。CI 以 `RUN_PERF=0` 跳过整套性能基准。`beforeAll` 的预热避免把 `initWasm()` 的编译耗时计入首个 case——否则首个 case 会无端超阈值 100ms+。
 >
-> ⚠️ **worker 模式为何不在 Node 测试（M5 修正）**：经源码核实，`modern-xlsx.worker.js` 与本库 `export.worker.ts` 都用 Web Worker 全局（`globalThis.addEventListener('message')` / `self.onmessage` / `postMessage`），Node 的 `worker_threads` 用 `parentPort`，两者不兼容。因此 5 万行（worker 路径）与 10 万行带样式（worker 路径）的**端到端耗时 + 主线程阻塞 ≤16ms** 必须在 7.3 的浏览器集成测试（Playwright）中验收。Node 套件的 50k/100k case 仅作 WASM-core 回归下限，**不能当作 worker 端到端验收通过的依据**——worker 端到端 = main 工作量 + 入向结构化克隆（5 万行 35-100ms，见附录 A）+ Worker 启动 + 出向回传，系统性高于 main 测出的数值。
+> ⚠️ **worker 模式为何不在 Node 测试（M5 修正）**：经源码核实，`modern-xlsx.worker.js` 与本库 `export.worker.ts` 都用 Web Worker 全局（`globalThis.addEventListener('message')` / `self.onmessage` / `postMessage`），Node 的 `worker_threads` 用 `parentPort`，两者不兼容。因此 5 万行（worker 路径）与 10 万行带样式（worker 路径）的**端到端耗时 + 主线程阻塞 ≤16ms** 必须在 7.3 的浏览器集成测试（Playwright）中验收。Node 套件的 50k/100k case 仅作 core 回归下限，**不能当作 worker 端到端验收通过的依据**——worker 端到端 = core 工作量 + 入向结构化克隆（5 万行 35-100ms，见附录 A）+ Worker 启动 + 出向回传，系统性高于 Node 测出的数值。
 
 ### 7.3 集成测试
 
@@ -2655,14 +3087,14 @@ test("worker-mode WASM 初始化失败时触发降级", async ({ page }) => {
 
 ## 八、实施计划与里程碑
 
-| 阶段                   | 周期        | 关键交付物                                                                                                     | 验收标准                                                                                                                                                                                                                                                                                                                                                                   |
-| ---------------------- | ----------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 1：技术预研      | 第 1-2 周   | 选型报告、Vue3+Vite Demo                                                                                       | modern-xlsx 在 Vite 中跑通 WASM 加载 + 批量导出；**worker 自包含打包 go/no-go 关卡（S5）**：tsup 把 modern-xlsx 打进 `export.worker.js` 后，`new Worker(url,{type:'module'})` 能正常加载且 worker 内 `initWasm(wasmUrl)` 成功（实测 esbuild 对 `new URL("modern_xlsx_wasm_bg.wasm", import.meta.url)` 原样保留，技术路径成立，但必须真机验证产物可运行）                   |
-| Phase 2：Monorepo 搭建 | 第 3 周     | pnpm+turbo+tsup+lint+CI 骨架                                                                                   | `pnpm build/test/lint` 全绿，CI 通过                                                                                                                                                                                                                                                                                                                                       |
-| Phase 3：核心包实现    | 第 4-6 周   | `@marcusok/excel-exporter` main 模式（WorkbookBuilder + StyleBuilder 样式 + FormatSpec 格式化 + SheetJS 降级） | main 模式导出 <5万行带完整样式可用；format/style/preset 单测全过；round-trip 读回校验通过；**对应 v0.1 发布节点**                                                                                                                                                                                                                                                          |
-| Phase 4：Worker + 流式 | 第 7-8 周   | Worker 多线程、流式写入                                                                                        | **4 列基准（v2.0 口径）**：1万行 worker 端到端 < 200ms；5万行 worker+stream 端到端 < 1000ms（对齐 1.2 验收表，50000 行走 stream）且 longtask 符合 1.2 主线程预算；10万行 worker+stream 端到端 < 2000ms 且无 longtask（7.3 Playwright 验收，列数缩放见 1.2 规则）；10 万行 stream 不 OOM；**worker 自包含打包 go/no-go 必须在 Phase 1 通过（见上），否则 Phase 4 无法验收** |
-| Phase 5：首个 App 接入 | 第 9-10 周  | admin-a 接入上线                                                                                               | 线上稳定无报错，降级率 < 1%                                                                                                                                                                                                                                                                                                                                                |
-| Phase 6：全面推广      | 第 11-12 周 | 所有 App 接入                                                                                                  | 接入率 100%，沉淀文档与监控                                                                                                                                                                                                                                                                                                                                                |
+| 阶段                   | 周期        | 关键交付物                                                                                                     | 验收标准                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------- | ----------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Phase 1：技术预研      | 第 1-2 周   | 选型报告、Vue3+Vite Demo                                                                                       | modern-xlsx 在 Vite 中跑通 WASM 加载 + 批量导出；**worker 自包含打包 go/no-go 关卡（S5）**：tsup 把 modern-xlsx 打进 `export.worker.js` 后，`new Worker(url,{type:'module'})` 能正常加载且 worker 内 `initWasm(wasmUrl)` 成功（实测 esbuild 对 `new URL("modern_xlsx_wasm_bg.wasm", import.meta.url)` 原样保留，技术路径成立，但必须真机验证产物可运行）                                                                                                                                                                                         |
+| Phase 2：Monorepo 搭建 | 第 3 周     | pnpm+turbo+tsup+lint+CI 骨架                                                                                   | `pnpm build/test/lint` 全绿，CI 通过                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Phase 3：核心包实现    | 第 4-6 周   | `@marcusok/excel-exporter` main 模式（WorkbookBuilder + StyleBuilder 样式 + FormatSpec 格式化 + SheetJS 降级） | main 模式导出 <5万行带完整样式可用；format/style/preset 单测全过；round-trip 读回校验通过；**对应 v0.1 发布节点**                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Phase 4：Worker + 流式 | 第 7-8 周   | Worker 多线程、流式写入                                                                                        | **4 列基准（v2.0 口径）**：1万行 worker 端到端 < 200ms；5万行 worker+stream 端到端 < 1000ms（对齐 1.2 验收表，50000 行走 stream）且 longtask 符合 1.2 主线程预算；10万行 worker+stream 端到端 < 2000ms 且无 longtask（7.3 Playwright 验收，列数缩放见 1.2 规则）；10 万行 stream 不 OOM；**worker 自包含打包 go/no-go 必须在 Phase 1 通过（见上），否则 Phase 4 无法验收**。**v2.6 注**：v2.5 切换 fast-xlsx 后已恢复原始硬指标（5万 <500ms / 10万 <1000ms，见 1.2 验收表），且现行 `WORKER_THRESHOLD=20_000` 下浏览器 1 万行走 main 而非 worker |
+| Phase 5：首个 App 接入 | 第 9-10 周  | admin-a 接入上线                                                                                               | 线上稳定无报错，降级率 < 1%                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Phase 6：全面推广      | 第 11-12 周 | 所有 App 接入                                                                                                  | 接入率 100%，沉淀文档与监控                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 **v0.1 发布节点（Phase 3 末）** 即可对外可用（main 模式 + 样式），Worker/流式在 v0.2 补齐。
 
@@ -2670,16 +3102,16 @@ test("worker-mode WASM 初始化失败时触发降级", async ({ page }) => {
 
 ## 九、风险与应对
 
-| 风险                         | 概率 | 影响 | 应对                                                                                                                        |
-| ---------------------------- | :--: | :--: | --------------------------------------------------------------------------------------------------------------------------- |
-| WASM 加载失败（CDN/网络）    |  中  |  高  | 自托管 `.wasm`；3 次指数退避重试；失败降级 SheetJS                                                                          |
-| 浏览器不支持 WASM            |  低  |  高  | `WebAssembly` 能力检测，直接走 SheetJS                                                                                      |
-| Worker 序列化开销大          |  中  |  中  | 仅 ≥500 行启用 Worker；阈值可配置                                                                                           |
-| modern-xlsx 版本不兼容       |  低  |  中  | 锁定 `^1.2.0`；升级走 Changeset minor 流程 + 回归测试                                                                       |
-| 大文件 OOM                   |  中  |  高  | ≥5 万行走 `StreamingXlsxWriter`；监控内存                                                                                   |
-| 颜色/样式在 Excel 中显示异常 |  低  |  中  | 用 6 位 RGB hex（不带 `#`）；样式单测 + 真机抽样验证                                                                        |
-| SheetJS 降级路径缺少样式     |  中  |  低  | 可接受；监控降级率，逐步修复 WASM 加载根因                                                                                  |
-| 浏览器 ≥500 行忘配 workerUrl |  中  |  中  | 当前实现静默降级 SheetJS（丢样式）；显式 configureWasm({workerUrl})；可选改进：检测缺失时回退 main 保样式（见 4.9 v2.2 注） |
+| 风险                            | 概率 | 影响 | 应对                                                                                                                                              |
+| ------------------------------- | :--: | :--: | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| WASM 加载失败（CDN/网络）       |  中  |  高  | 自托管 `.wasm`；3 次指数退避重试；失败降级 SheetJS                                                                                                |
+| 浏览器不支持 WASM               |  低  |  高  | `WebAssembly` 能力检测，直接走 SheetJS                                                                                                            |
+| Worker 序列化开销大             |  中  |  中  | 仅 ≥20,000 行启用 Worker（auto；可用 `mode` 显式覆盖，v2.6 对齐源码）                                                                             |
+| modern-xlsx 版本不兼容          |  低  |  中  | 锁定 `^1.2.0`；升级走 Changeset minor 流程 + 回归测试                                                                                             |
+| 大文件 OOM                      |  中  |  高  | ≥5 万行走 fast-xlsx（fflate minimal OOXML，v2.5 起；旧写 `StreamingXlsxWriter` 已弃用）；监控内存                                                 |
+| 颜色/样式在 Excel 中显示异常    |  低  |  中  | 用 6 位 RGB hex（不带 `#`）；样式单测 + 真机抽样验证                                                                                              |
+| SheetJS 降级路径缺少样式        |  中  |  低  | 可接受；监控降级率，逐步修复 WASM 加载根因                                                                                                        |
+| 浏览器 ≥20,000 行忘配 workerUrl |  中  |  中  | 当前实现降级 SheetJS 并打 console.warn（丢样式，非静默）；显式 configureWasm({workerUrl})；可选改进：检测缺失时回退 main 保样式（见 4.9 v2.2 注） |
 
 ---
 
@@ -2805,13 +3237,13 @@ const blob = new Blob([bytes], {
 
 ---
 
-**文档版本**：v2.1 ｜ **核对基准**：modern-xlsx@1.2.0（npm tarball 解包 + `dist/index.d.mts` + `dist/validate-chart-D1O7LOfU.d.mts` 类型定义 + `dist/utils-Fc_qcAP_.mjs` / `dist/modern-xlsx.worker.js` 源码）+ **Node v22.22.2 独立进程二次实测**（toBuffer 塌方/stream/结构化克隆/finish 分步，共 30+ 次）｜ **最后更新**：2026-07-30（v2.1 源码对齐；v2.0 评审修正：二次复确认 v1.9 toBuffer 塌方论断，修正 finish() 3ms→90ms、wasm-lite/wasm 文件名错误，修复 format 联合类型调用崩溃，清理 5.3/4.9 内部矛盾，性能指标对齐实测可达水平，详见顶部 v2.0 摘要与文末修订历史）
+**文档版本**：v2.6 ｜ **核对基准**：modern-xlsx@1.2.0（npm tarball 解包 + `dist/index.d.mts` + `dist/validate-chart-D1O7LOfU.d.mts` 类型定义 + `dist/utils-Fc_qcAP_.mjs` / `dist/modern-xlsx.worker.js` 源码）+ **Node v22.22.2 独立进程二次实测**（toBuffer 塌方/stream/结构化克隆/finish 分步，共 30+ 次）+ **v2.6 仓库源码逐文件比对**（`packages/excel-exporter/src`，快照与源码 diff 一致）｜ **最后更新**：2026-08-17（v2.6 源码再对齐：WORKER_THRESHOLD 20,000、fast-xlsx/worker 快照刷新、PERF_TIGHT 机制移除说明；历史见文末修订历史）
 
 ---
 
 ### 附录 F · Node 版本与补充依赖（v2.1 重写）
 
-> 📌 **本仓库用 Node 22，不升级到 24**：`@marcusok/excel-exporter` 与 monorepo 根的 `engines.node` 均为 `>=22.0.0`，`.nvmrc` 锁定 `22`，CI `node-version: 22`。核心依赖 modern-xlsx@1.2.0 的 `engines.node` 声明为 `>=24.0.0`，但其 WASM 核心面向浏览器、与 Node 版本无关；本仓库在 Node 22（v22.22.2）下 `lint/typecheck/test/build` 全绿（35 个测试全部通过，实测验证）。注意：modern-xlsx README 无 "Node Usage" 章节，其顶部声明要求 "Node.js 24+"，Node 22 可用性由本仓库测试实测而非 README 声明。`.npmrc` 设 `engine-strict=false`，避免 modern-xlsx 的 engines 声明在 Node 22 下阻断 `pnpm install`（见 3.5）。本地推荐 fnm/nvm 并 `fnm use`（读 `.nvmrc`）。
+> 📌 **本仓库用 Node 22，不升级到 24**：`@marcusok/excel-exporter` 与 monorepo 根的 `engines.node` 均为 `>=22.0.0`，`.nvmrc` 锁定 `22`，CI `node-version: 22`。核心依赖 modern-xlsx@1.2.0 的 `engines.node` 声明为 `>=24.0.0`，但其 WASM 核心面向浏览器、与 Node 版本无关；本仓库在 Node 22（v22.22.2）下 `lint/typecheck/test/build` 全绿（47 个用例实测通过；CI 以 `RUN_PERF=0` 跳过 4 个性能基准、实跑 43 个，v2.6 更新）。注意：modern-xlsx README 无 "Node Usage" 章节，其顶部声明要求 "Node.js 24+"，Node 22 可用性由本仓库测试实测而非 README 声明。`.npmrc` 设 `engine-strict=false`，避免 modern-xlsx 的 engines 声明在 Node 22 下阻断 `pnpm install`（见 3.5）。本地推荐 fnm/nvm 并 `fnm use`（读 `.nvmrc`）。
 >
 > v2.0 曾把 `@playwright/test`（`^1.62.0`）列入「补充依赖」、并写「Node 24+ 升级指引」，二者均与实际仓库不符（本仓库无 Playwright、CI 跑 Node 22），v2.1 已删除该依赖行与升级指引。关于 `unplugin`：6.2 的 Vite 插件是 Vite 原生插件对象（`{ name, buildStart() }`），全程未 import `unplugin`；若未来要让资源拷贝同时支持 Webpack，再按需引入。
 
@@ -2827,6 +3259,15 @@ const blob = new Blob([bytes], {
 
 ### 修订历史
 
+- **v2.6（源码再对齐，2026-08-17）**：
+  - **WORKER_THRESHOLD 500 → 20,000 全文修正（P0）**：提交 0c0fbd5 将 `src/index.ts` 的 Worker 阈值从 500 调回 20,000，但正文（1.2 验收表与阻塞预算、4.10 pickMode 快照与 v2.2 注、5.2 策略、5.3 调度表与阈值注、6.3 format 适用场景、7.2 测什么说明、风险表、附录 G）仍按 500 口径陈述，已逐处修正并注明 v2.6；修订历史中 v1.8/v2.1/v2.4 条目对 500 的记载保留为历史记录。
+  - **4.8/4.9/4.10/7.2 代码快照整体刷新**：streaming-builder.ts（薄委托）、fast-xlsx.ts（全量）、worker-exporter.ts、workers/export.worker.ts、index.ts、performance.test.ts 快照替换为现行源码，均与仓库文件 diff 校验一致。旧 StreamingXlsxWriter 实现块加【历史】标注保留。
+  - **12d47a4 修复同步**：worker onerror 坏实例 terminate+重建、按实例过滤 reject、onPhase 从 Worker 转发、stripFunctionFormats 剥离回调——旧快照会复用坏 Worker「永远失败进 SheetJS」，已更新。
+  - **stream 免 WASM**：4.10 旧快照在 pickMode 前无条件做 WASM 能力检测，现行 `needsWasm = workerMode !== "stream"`（fast-xlsx 不用 WASM）；不支持 WebAssembly 的浏览器 ≥5 万行不再降级 SheetJS。
+  - **PERF_TIGHT/SLACK 机制说明修正**：现行 `SLACK` 恒为 1.0（本地阈值即产品 SLA），CI 以 `RUN_PERF=0` 跳过性能基准；7.2 旧文的「1.5x 容差、PERF_TIGHT=1 收紧」与「在 CI 上跑」均已过时。
+  - **4.1/4.2 快照补齐**：文件清单补 fast-xlsx.ts / table-export.ts / echarts-export.ts / adapters.test.ts / phases.test.ts；package.json 快照更新为 1.0.1，补 `./package.json` 导出与 `fflate` 运行时依赖。
+  - **附录 F 测试数更新**：35 → 47（CI 跳过 4 个性能基准、实跑 43）。
+  - **顺手清理**：移除正文中 2 处残留的换页控制字符（v2.1「ormat 截断」修复的同类痕迹）；文档版本标签统一为 v2.6（v2.4 遗留的低优先级清理项，本次一并完成）。
 - **v2.4（验收口径与值语义陷阱修正）**：
   - **P0 · 7.2「1 万行 = main 生产路径」自相矛盾（纠正）**：原 7.2 称 1 万行 `mode:'main'` "就是生产路径（pickMode 对 <500 行路由 main）"，但 1 万行 ≥ `WORKER_THRESHOLD`(500)，浏览器生产路径是 worker（与 5 万行同口径，见 `index.ts` pickMode）。"<500 行路由 main"是对 <500 行的描述，与 1 万行无关。已将 1/5/10 万行统一为同口径：Node 套件测的均是 WASM-core 回归下限，worker 端到端验收统一归 7.3 Playwright。
   - **P1 · 1.2 验收表列名误导（纠正）**：表头「端到端耗时上限」+「实测 109ms ✅」易被读成"worker 端到端已验收"，但实测数字均为 Node WASM-core 计时（worker E2E 从未实测）。已将列头改为「端到端耗时上限（目标）」+「WASM-core 实测（…worker E2E 见 7.3）」，去掉 ✅ 过度断言；同步修正 📌 注释中"端到端实测耗时"的自相矛盾措辞。
@@ -2899,4 +3340,4 @@ const blob = new Blob([bytes], {
 
 ### 附录 G · writeBlob 同步调用警告
 
-modern-xlsx 的 `writeBlob(wb)` 同步执行 `wb.toJSON()` + WASM 序列化，**全程同步阻塞调用线程**。v1.9 实测：10 万行场景主线程开销独立进程首次 **17.5 秒**（塌方，见附录 A）、热状态 628ms——无论哪个都远超 ≤16ms 预算。`@marcusok/excel-exporter` 不暴露 `writeBlob`，也不在主线程调 `wb.toBuffer()`：① <5 万行（≤49,999）走 Workbook + Worker；② ≥5 万行（50000 起）走 StreamingXlsxWriter（Worker 内，`finish()` 实测 ~90ms，v2.0 修正）。`writeBlob` / 主线程 `toBuffer` 仅存在于 main 模式（<500 行；浏览器 <500 行因数据量小可接受主线程阻塞，Node/SSR 无 Worker 可用也走此路径）。
+modern-xlsx 的 `writeBlob(wb)` 同步执行 `wb.toJSON()` + WASM 序列化，**全程同步阻塞调用线程**。v1.9 实测：10 万行场景主线程开销独立进程首次 **17.5 秒**（塌方，见附录 A）、热状态 628ms——无论哪个都远超交互预算。`@marcusok/excel-exporter` 不暴露 `writeBlob`，也不在主线程调 `wb.toBuffer()`：① <5 万行（≤49,999）走 Workbook（浏览器 20,000–49,999 行在 Worker 内）；② ≥5 万行（50000 起）走 fast-xlsx（v2.5 起，浏览器在 Worker 内，不需要 WASM）。主线程 `toBuffer` 仅存在于 main 模式（浏览器 <20,000 行，数据量小可接受主线程阻塞；Node/SSR 无 Worker 可用也走此路径）。（v2.6 注：旧文按 `WORKER_THRESHOLD=500` 写作"<500 行"，已按现行阈值 20,000 修正。）

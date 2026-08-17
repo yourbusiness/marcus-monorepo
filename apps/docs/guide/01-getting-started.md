@@ -10,9 +10,9 @@ pnpm add @marcusok/excel-exporter modern-xlsx
 
 `modern-xlsx` 是必装 peerDependency，原因有三：
 
-1. `modern-xlsx.wasm`（约 0.9MB）需要由消费方作为静态资源自行部署，隐式依赖会掩盖这一硬性要求；
+1. `modern-xlsx.wasm`（约 1.9MB）需要由消费方作为静态资源自行部署，隐式依赖会掩盖这一硬性要求；
 2. 本包是 modern-xlsx 的封装，版本控制权应交给消费方；
-3. pnpm 默认不会自动安装 peerDependency。
+3. 包管理器默认会自动安装 peerDependency（npm 7+ / pnpm 8+ 起），隐式装上的版本不受消费方掌控，显式声明才能锁定版本意图。
 
 `xlsx`（SheetJS）为**可选** peerDependency，仅在需要降级兜底时安装；不安装时兜底会从官方 CDN 加载。
 
@@ -69,7 +69,7 @@ configureWasm({
 });
 ```
 
-Node / SSR 环境**无需**部署静态资源，直接使用即可。
+Node / SSR 环境**无需**部署浏览器静态资源，但本地运行时需先 `initWasmSync` 初始化 WASM（见 [Node/SSR](/packages/excel-exporter/guide/09-node-ssr)），否则会降级到无样式的 SheetJS 兜底。
 
 ## 3. 第一个导出
 

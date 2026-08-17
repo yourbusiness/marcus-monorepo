@@ -33,4 +33,4 @@ import type { StylePresetName } from "@marcusok/excel-exporter";
 const name: StylePresetName = "currency"; // "header" | "currency" | "percent" | "date" | "datetime" | "dataRow" | "danger"
 ```
 
-> 注意：`style` 应用于数据单元格，表头保持默认样式。需要表头样式时请自定义 `CellStyle` 并在业务层自行处理（列样式不会应用于表头，这是类型约定的行为）。
+> 注意：`style` 应用于数据单元格，不作用于表头。需要表头样式时，可直接用 `headerStyle` 字段（工作表级 `SheetConfig.headerStyle` 设默认，列级 `ColumnConfig.headerStyle` 覆盖），例如 `headerStyle: StylePresets.header`。

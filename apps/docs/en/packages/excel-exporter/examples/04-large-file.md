@@ -11,7 +11,9 @@ Large exports are the core strength of excel-exporter: 100k rows run in a Worker
 ```ts
 import { exportExcel } from "@marcusok/excel-exporter";
 
-const rows = salesMockRows(100_000);
+// rows: sales data from your business layer, fields matching the columns
+// below (fetching is omitted here; the scenario uses 100k rows — the live
+// demo generates same-shaped mock data)
 
 const result = await exportExcel({
   filename: "large-export-100k",

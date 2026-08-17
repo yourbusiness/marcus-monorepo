@@ -7,7 +7,7 @@
 - 环境不支持 `WebAssembly`；
 - `modern-xlsx.wasm` 加载失败（重试 `maxRetries` 次后仍失败，默认 3 次）；
 - Worker 路径初始化失败（如 workerUrl 404）；
-- 构建阶段抛错（如非法工作表名）。
+- 构建阶段抛错（如 modern-xlsx 构建期内部错误）。注意：非法工作表名不在此列——兜底路径会再次校验同一表名并失败，最终返回 `success: false`，无法被兜底救回。
 
 ## 行为差异
 

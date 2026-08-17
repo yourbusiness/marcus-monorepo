@@ -1,6 +1,6 @@
 # API：FormatSpec 值格式化
 
-结构化、可跨线程的值格式化描述。Worker/Stream 路径只能使用 FormatSpec；函数形式仅在 main 路径可用。
+结构化、可跨线程的值格式化描述。Worker/Stream 路径建议使用 FormatSpec；函数形式的实际可用范围见文末「函数形式」。
 
 ## 类型定义
 
@@ -43,15 +43,21 @@ type FormatSpec =
 ### padding
 
 ```ts
-{ type: "padding", fill: "0", length: 6, align: "left" }
+{ type: "padding", fill: "0", length: 6 } // "42" -> "000042"
 ```
 
-左（`padEnd`）/ 右（`padStart`）补全到固定长度，适合工号、订单号等。
+省略 `align`（默认）对应 `padStart`，在**左侧**补字符（值右对齐），适合工号、订单号的前导零场景；`align: "left"` 对应 `padEnd`，在**右侧**补字符（值左对齐）。
 
-## 函数形式（main 路径）
+## 函数形式
 
 ```ts
 format: (value, row) => string | number | boolean;
 ```
 
-可以访问整行数据做条件格式化。使用函数列后，导出路径被限制为 `main`；如需 Worker/Stream，请改写为 FormatSpec。
+可以访问整行数据做条件格式化。函数无法穿过结构化克隆，因此各路径行为不同：
+
+- **main 路径**（浏览器 < 20,000 行 / Node < 50,000 行）：函数正常执行；
+- **Node 的 stream 路径**（≥ 50,000 行）：同样在主线程执行，函数正常执行；
+- **浏览器 worker 路径**（auto ≥ 20,000 行，或显式 `mode: "worker"` / `mode: "stream"`）：函数会被**剥离并打印 `console.warn`**，该列以原始值导出（不会报错，也不会回落到 main）。
+
+需要 worker 路径保留格式时，请改写为 FormatSpec。

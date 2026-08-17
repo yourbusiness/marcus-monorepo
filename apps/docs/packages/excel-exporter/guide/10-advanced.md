@@ -14,7 +14,7 @@ await exportExcel({
 });
 ```
 
-工作表名需满足 ECMA-376 约束：非空、不超过 31 字符、不含 `: \ / ? * [ ]`。违反时导出会抛出明确错误，避免生成损坏文件。
+工作表名需满足 ECMA-376 约束：非空、不超过 31 字符、不含 `: \ / ? * [ ]`。违反时不会生成损坏文件，也不会以异常形式抛出——校验错误会被捕获并走兜底流程，兜底路径会再次校验同一表名，最终以 `{ success: false, error }` 返回（错误信息明确）。
 
 ## 冻结行
 
@@ -45,7 +45,7 @@ await exportExcel({
 await exportExcel({
   ...,
   onProgress: (progress) => {
-    // 0 → 1，worker/stream 路径有效（stream 每 1000 行上报一次）
+    // 0 → 1；分段进度仅 stream 路径有（每 1000 行上报一次），main 与 worker+Workbook 只回调首尾
     bar.style.width = `${progress * 100}%`;
   },
   onPhase: (phase, durationMs) => {
@@ -57,11 +57,11 @@ await exportExcel({
 
 各阶段语义：
 
-| 阶段       | 说明                                                          |
-| ---------- | ------------------------------------------------------------- |
-| `init`     | WASM 初始化（首次加载才测量）；SheetJS 兜底不报告             |
-| `build`    | 工作簿构建（Workbook / Stream / SheetJS 兜底各报告一次）      |
-| `download` | 浏览器触发下载（`download: false` 时不报告；Node 下无此阶段） |
+| 阶段       | 说明                                                                            |
+| ---------- | ------------------------------------------------------------------------------- |
+| `init`     | WASM 初始化（首次加载才测量）；SheetJS 兜底不报告                               |
+| `build`    | 工作簿构建（按实际构建次数报告，含兜底重试——失败后走 SheetJS 兜底会再报告一次） |
+| `download` | 浏览器触发下载（`download: false` 时不报告；Node 下无此阶段）                   |
 
 > `onPhase` 只反映各阶段耗时，不影响 `ExportResult.duration`（始终测量完整导出）。
 

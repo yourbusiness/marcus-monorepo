@@ -14,7 +14,7 @@ configureWasm({
 });
 ```
 
-只有浏览器中的 `worker` / `auto`（数据量 ≥ 20,000 行）路径需要它。
+只有浏览器中会进入 Worker 的路径需要它：`auto`（数据量 ≥ 20,000 行）、显式 `mode: "worker"`，以及浏览器中的显式 `mode: "stream"`（浏览器下 stream 同样在 Worker 内执行）。未配置时这些路径会抛错并降级到 SheetJS。
 
 ### 导出结果里 engine 是 "sheetjs"
 
@@ -32,6 +32,6 @@ Stream 路径 v1 不支持单元格样式与列宽/冻结/筛选/合并等布局
 
 是。所有处理都在浏览器/Node 进程内完成，不上传任何业务数据。
 
-### 日期显示成数字序列
+### 日期列显示为长文本，Excel 不识别为日期
 
-日期列需要声明 `format: { type: "date" }`（或 `datetime`），Workbook 路径会自动注入对应 `numFormat`，否则单元格会显示日期序列值。
+不声明 `format` 时，`Date` 值会按 JS 默认文本写入单元格（如 `Wed Jul 01 2026 00:00:00 GMT+0800 (China Standard Time)`），只是一段普通字符串。日期列需要声明 `format: { type: "date" }`（或 `datetime`）：Workbook 路径会写入 Excel 日期序列并自动注入对应 `numFormat`，单元格才会被 Excel 识别为真正的日期。

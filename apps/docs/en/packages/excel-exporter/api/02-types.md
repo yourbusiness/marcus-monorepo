@@ -14,14 +14,14 @@
 
 ## ColumnConfig
 
-| Field          | Type                     | Required | Description                                                       |
-| -------------- | ------------------------ | -------- | ----------------------------------------------------------------- |
-| `key`          | `string`                 | ✅       | Field name on the data row                                        |
-| `header`       | `string`                 | ✅       | Header text                                                       |
-| `width?`       | `number`                 | —        | Column width (Excel character units)                              |
-| `style?`       | `CellStyle`              | —        | Data-cell style (headers excluded)                                |
-| `headerStyle?` | `CellStyle`              | —        | Header style for this column; wins over sheet-level `headerStyle` |
-| `format?`      | `FormatSpec \| Function` | —        | Value formatting; function form is main-path only                 |
+| Field          | Type                     | Required | Description                                                                                                                |
+| -------------- | ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `key`          | `string`                 | ✅       | Field name on the data row                                                                                                 |
+| `header`       | `string`                 | ✅       | Header text                                                                                                                |
+| `width?`       | `number`                 | —        | Column width (Excel character units)                                                                                       |
+| `style?`       | `CellStyle`              | —        | Data-cell style (headers excluded)                                                                                         |
+| `headerStyle?` | `CellStyle`              | —        | Header style for this column; wins over sheet-level `headerStyle`                                                          |
+| `format?`      | `FormatSpec \| Function` | —        | Value formatting; functions run on main-thread paths and are stripped on the browser worker path (see the FormatSpec page) |
 
 ## MergeRange
 

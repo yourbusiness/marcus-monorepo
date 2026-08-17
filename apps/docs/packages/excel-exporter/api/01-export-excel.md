@@ -10,14 +10,14 @@ exportExcel(options: ExportOptions): Promise<ExportResult>
 
 ## ExportOptions
 
-| 字段         | 类型                                               | 必填 | 说明                                            |
-| ------------ | -------------------------------------------------- | ---- | ----------------------------------------------- |
-| `sheets`     | `SheetConfig[]`                                    | ✅   | 工作表配置，至少一个                            |
-| `filename`   | `string`                                           | ✅   | 下载文件名，缺 `.xlsx` 后缀自动补全             |
-| `mode`       | `"auto" \| "main" \| "worker" \| "stream"`         | —    | 默认 `"auto"`，按行数自动路由                   |
-| `onProgress` | `(progress: number) => void`                       | —    | 0 → 1；worker/stream 路径有效                   |
-| `onPhase`    | `(phase: ExportPhase, durationMs: number) => void` | —    | `init` / `build` / `download` 阶段耗时          |
-| `download`   | `boolean`                                          | —    | 默认 `true` 触发浏览器下载；`false` 只返回 Blob |
+| 字段         | 类型                                               | 必填 | 说明                                                                                             |
+| ------------ | -------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------ |
+| `sheets`     | `SheetConfig[]`                                    | ✅   | 工作表配置，至少一个                                                                             |
+| `filename`   | `string`                                           | ✅   | 下载文件名，缺 `.xlsx` 后缀自动补全                                                              |
+| `mode`       | `"auto" \| "main" \| "worker" \| "stream"`         | —    | 默认 `"auto"`，按行数自动路由                                                                    |
+| `onProgress` | `(progress: number) => void`                       | —    | 0 → 1；分段进度仅 stream 路径有（每 1000 行上报一次），main 与 worker+Workbook 只回调首尾 0 与 1 |
+| `onPhase`    | `(phase: ExportPhase, durationMs: number) => void` | —    | `init` / `build` / `download` 阶段耗时                                                           |
+| `download`   | `boolean`                                          | —    | 默认 `true` 触发浏览器下载；`false` 只返回 Blob                                                  |
 
 ## ExportResult
 

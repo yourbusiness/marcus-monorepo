@@ -11,6 +11,9 @@ Admin reports often combine several topics in one file. This example builds a wo
 ```ts
 import { exportExcel, StylePresets } from "@marcusok/excel-exporter";
 
+// salesRows / staffRows: data from your business layer (fetching is omitted
+// here); fields match each sheet's columns below
+
 const result = await exportExcel({
   filename: "department-report-2026-Q3",
   sheets: [
