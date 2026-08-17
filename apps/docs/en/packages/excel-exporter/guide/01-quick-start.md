@@ -25,7 +25,7 @@ await exportExcel({
 });
 ```
 
-This downloads `hello.xlsx` in the browser; `.xlsx` is appended when `filename` has no extension.
+This downloads `hello.xlsx` in the browser; `.xlsx` is appended unless `filename` already ends with it.
 
 ## With styles and formatting
 

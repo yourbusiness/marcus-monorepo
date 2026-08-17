@@ -1,12 +1,12 @@
-# @marcusok/excel-exporter · 高性能 Excel 导出引擎
+# @marcusok/excel-exporter · Excel 导出引擎
 
-基于 [modern-xlsx](https://github.com/ABCrimson/modern-xlsx)（WASM）与自研 Fast stream 构建的高性能 Excel 导出库。提供声明式 API、自动模式路由、完整单元格样式、Web Worker 多线程、快速写入以及 SheetJS 降级保底。
+基于 [modern-xlsx](https://github.com/ABCrimson/modern-xlsx)（WASM）与自研 Fast stream 构建的 Excel 导出库。提供声明式 API、自动模式路由、完整单元格样式、Web Worker 多线程、快速写入以及 SheetJS 降级兜底。
 
 > 📖 **在线文档**：https://yourbusiness.github.io/marcus-monorepo/packages/excel-exporter/
 
 ## 性能参考
 
-本机实测（真实 Chrome + Play 同款 6 列；Node 独立进程回归测试用 4 列精简列集，见 `src/__tests__/performance.test.ts`）：
+本机实测（真实 Chrome，6 列混合类型；Node 独立进程回归测试用 4 列精简列集，见 `src/__tests__/performance.test.ts`）：
 
 | 数据量  | auto 路由   | 实测耗时 | 硬性要求 |
 | ------- | ----------- | -------- | -------- |
@@ -14,7 +14,7 @@
 | 5 万行  | Fast stream | ~400ms   | < 500ms  |
 | 10 万行 | Fast stream | ~780ms   | < 1000ms |
 
-> 大文件路径不再依赖 `modern-xlsx` 的 `StreamingXlsxWriter`，而是用 `fflate` 同步压缩一个 minimal OOXML 工作簿。它在 100k×6 列 Play 场景下约 0.8s，且避开 `Workbook.toBuffer()` 在 5.5 万行后的超线性塌方。
+> 大文件路径不再依赖 `modern-xlsx` 的 `StreamingXlsxWriter`，而是用 `fflate` 同步压缩一个 minimal OOXML 工作簿。它在 100k×6 列场景下约 0.8s，且避开 `Workbook.toBuffer()` 在 5.5 万行后的超线性塌方。
 
 ## 安装
 
@@ -24,7 +24,7 @@ pnpm add @marcusok/excel-exporter modern-xlsx
 
 环境：Node >= 22、pnpm >= 9。modern-xlsx@1.2.0 声明 `engines.node>=24`，但其 WASM 核心面向浏览器；本包在 Node 22 下测试全部通过（共 47 个用例；CI 默认 `RUN_PERF=0` 跳过 4 个性能基准，实跑 43 个）。本包在 1.2.0 上开发测试，推荐消费方锁定此版本（peerDep 兼容范围 `^1.2.0`，但未验证更高版本）。
 
-> modern-xlsx 声明为 `peerDependency`，消费方必须显式安装。原因：(1) `modern-xlsx.wasm`（1.9MB）需由消费方作为静态资源部署，隐式依赖会掩盖这一硬性要求；(2) peerDep 语义上正确——本包是 modern-xlsx 的封装，版本控制权在消费方；(3) 包管理器默认会自动安装 peerDependency（npm 7+ / pnpm 8+ 起），隐式装上的版本不受消费方掌控，显式声明才能锁定版本意图。`xlsx`（SheetJS）为 optional peerDep，仅在需要降级保底时安装。
+> modern-xlsx 声明为 `peerDependency`，消费方必须显式安装。原因：(1) `modern-xlsx.wasm`（1.9MB）需由消费方作为静态资源部署，隐式依赖会掩盖这一硬性要求；(2) peerDep 语义上正确——本包是 modern-xlsx 的封装，版本控制权在消费方；(3) 包管理器默认会自动安装 peerDependency（npm 7+ / pnpm 8+ 起），隐式装上的版本不受消费方掌控，显式声明才能锁定版本意图。`xlsx`（SheetJS）为 optional peerDep，仅在需要降级兜底时安装。
 
 ## 配置（浏览器）
 
@@ -140,9 +140,9 @@ Worker 路径的主线程只做一次结构化克隆 `postMessage`（10 万行 ~
 
 `main` 模式额外支持函数形式：`format: (v) => v ? "是" : "否"`。
 
-### 降级保底
+### 降级兜底
 
-WASM 不支持或加载失败时自动降级 SheetJS（[`src/fallback.ts`](./src/fallback.ts)）。降级导出无样式，但保证数据可用。`ExportResult.engine` 标记 `'sheetjs'` 便于监控降级率。
+WASM 不支持或加载失败时自动降级 SheetJS（[`src/fallback.ts`](./src/fallback.ts)），降级导出不带样式；`ExportResult.engine` 标记 `'sheetjs'` 便于监控降级率。
 
 ## API
 

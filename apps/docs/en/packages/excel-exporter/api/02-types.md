@@ -4,9 +4,9 @@
 
 | Field          | Type                        | Required | Description                                                    |
 | -------------- | --------------------------- | -------- | -------------------------------------------------------------- |
-| `name`         | `string`                    | ✅       | ≤ 31 chars, no `: \ / ? * [ ]`                                 |
-| `columns`      | `ColumnConfig[]`            | ✅       | Column definitions                                             |
-| `data`         | `Record<string, unknown>[]` | ✅       | Row data                                                       |
+| `name`         | `string`                    | yes      | ≤ 31 chars, no `: \ / ? * [ ]`                                 |
+| `columns`      | `ColumnConfig[]`            | yes      | Column definitions                                             |
+| `data`         | `Record<string, unknown>[]` | yes      | Row data                                                       |
 | `headerStyle?` | `CellStyle`                 | —        | Default header style; overridden by column-level `headerStyle` |
 | `freezeRows?`  | `number`                    | —        | Freeze the first N header rows                                 |
 | `merges?`      | `MergeRange[]`              | —        | Merged cells (relative to the data area)                       |
@@ -16,8 +16,8 @@
 
 | Field          | Type                     | Required | Description                                                                                                                |
 | -------------- | ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `key`          | `string`                 | ✅       | Field name on the data row                                                                                                 |
-| `header`       | `string`                 | ✅       | Header text                                                                                                                |
+| `key`          | `string`                 | yes      | Field name on the data row                                                                                                 |
+| `header`       | `string`                 | yes      | Header text                                                                                                                |
 | `width?`       | `number`                 | —        | Column width (Excel character units)                                                                                       |
 | `style?`       | `CellStyle`              | —        | Data-cell style (headers excluded)                                                                                         |
 | `headerStyle?` | `CellStyle`              | —        | Header style for this column; wins over sheet-level `headerStyle`                                                          |

@@ -1,6 +1,6 @@
 # Example: 100k-Row Export
 
-Large exports are the core strength of excel-exporter: 100k rows run in a Worker in the browser so the main thread stays responsive, with Fast stream finishing in ~0.8s.
+Large exports are what the Fast stream path is built for: 100k rows run in a Worker in the browser (the main thread only does one structured clone), with Fast stream finishing in ~0.8s.
 
 ## Mock data preview
 

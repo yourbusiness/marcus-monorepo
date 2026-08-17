@@ -4,15 +4,15 @@ A column-level `style` (`CellStyle`) applies to all **data cells** of that colum
 
 ## Built-in presets
 
-| Preset                  | Visual                                                                                                                   | Description                                    |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
-| `StylePresets.header`   | <span style="display:inline-block;width:12px;height:12px;background:#1F4E79;border-radius:2px"></span> dark blue / white | Bold, `#1F4E79` fill, white text, centered     |
-| `StylePresets.currency` | `#,##0.00`                                                                                                               | Thousands separator, 2 decimals, right-aligned |
-| `StylePresets.percent`  | `0.00%`                                                                                                                  | Percentage format, right-aligned               |
-| `StylePresets.date`     | `yyyy-MM-dd`                                                                                                             | Date format, centered                          |
-| `StylePresets.datetime` | `yyyy-MM-dd HH:mm`                                                                                                       | Date-time format, centered                     |
-| `StylePresets.dataRow`  | left + thin bottom border                                                                                                | Thin `#D0D0D0` bottom border                   |
-| `StylePresets.danger`   | <span style="display:inline-block;width:12px;height:12px;background:#C00000;border-radius:2px"></span> red bold          | Bold red text `#C00000`, centered              |
+| Preset                  | Visual                                                                                                                   | Description                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| `StylePresets.header`   | <span style="display:inline-block;width:12px;height:12px;background:#1F4E79;border-radius:2px"></span> dark blue / white | Bold, size 12, `#1F4E79` fill, white text, centered |
+| `StylePresets.currency` | `#,##0.00`                                                                                                               | Thousands separator, 2 decimals, right-aligned      |
+| `StylePresets.percent`  | `0.00%`                                                                                                                  | Percentage format, right-aligned                    |
+| `StylePresets.date`     | `yyyy-MM-dd`                                                                                                             | Date format, centered                               |
+| `StylePresets.datetime` | `yyyy-MM-dd HH:mm`                                                                                                       | Date-time format, centered                          |
+| `StylePresets.dataRow`  | left + thin bottom border                                                                                                | Thin `#D0D0D0` bottom border                        |
+| `StylePresets.danger`   | <span style="display:inline-block;width:12px;height:12px;background:#C00000;border-radius:2px"></span> red bold          | Bold red text `#C00000`, centered                   |
 
 ```ts
 import { exportExcel, StylePresets } from "@marcusok/excel-exporter";

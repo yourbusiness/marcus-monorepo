@@ -2,7 +2,7 @@
 
 ## Worker threading (≥ 20,000 rows)
 
-At ≥ 20,000 rows in the browser, `auto` selects the Worker path: the main thread only does one structured clone (~94ms at 100k rows), while WASM loading and building happen inside the Worker.
+At ≥ 20,000 rows in the browser, `auto` selects the Worker path: the main thread only does one structured clone (~94ms at 100k rows) and everything else happens inside the Worker. Rows 20,000–49,999 load WASM and build inside the Worker (Workbook path); at ≥ 50,000 rows it switches to the WASM-free Fast stream (see below).
 
 ```ts
 configureWasm({ workerUrl: "/assets/export.worker.js" });
@@ -21,25 +21,26 @@ Worker path behavior:
 
 Known stream limitations (v1):
 
-| Feature                       | Stream path                                           |
-| ----------------------------- | ----------------------------------------------------- |
-| Cell styles (`style`)         | ❌ not supported                                      |
-| Column width (`width`)        | ❌ not supported                                      |
-| Freeze / auto-filter / merges | ❌ not supported                                      |
-| Custom number formats         | ❌ not supported (`decimals` baked into stored value) |
-| Date formats                  | ✅ readable strings per pattern                       |
-| Progress callback             | ✅ reported every 1000 rows                           |
+| Feature                       | Stream path                                        |
+| ----------------------------- | -------------------------------------------------- |
+| Cell styles (`style`)         | not supported                                      |
+| Header styles (`headerStyle`) | not supported                                      |
+| Column width (`width`)        | not supported                                      |
+| Freeze / auto-filter / merges | not supported                                      |
+| Custom number formats         | not supported (`decimals` baked into stored value) |
+| Date formats                  | readable strings per pattern                       |
+| Progress callback             | reported every 1000 rows                           |
 
-Skipped features (cell styles, column width, freeze, ...) print `[excel-exporter] stream mode: features not supported (...)` in the console.
+Skipped features (cell styles, header styles, column width, freeze, ...) print `[excel-exporter] stream mode: features not supported (...)` in the console.
 
 ## Which path should I use?
 
-| Need                            | Recommended                                       |
-| ------------------------------- | ------------------------------------------------- |
-| ≤ 50k rows with full styling    | `auto` (main / worker + Workbook)                 |
-| > 50k rows, styling can degrade | `auto` (worker + Fast stream), responsive browser |
-| Large batch in Node             | `auto` (main → stream at ≥ 50k)                   |
-| Zero main-thread blocking       | explicit `mode: "worker"`                         |
+| Need                            | Recommended                       |
+| ------------------------------- | --------------------------------- |
+| < 50k rows with full styling    | `auto` (main / worker + Workbook) |
+| ≥ 50k rows, styling can degrade | `auto` (worker + Fast stream)     |
+| Large batch in Node             | `auto` (main → stream at ≥ 50k)   |
+| Zero main-thread blocking       | explicit `mode: "worker"`         |
 
 ## Lower-level APIs
 

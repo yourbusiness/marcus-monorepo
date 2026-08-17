@@ -1,6 +1,6 @@
 # 案例：10 万行大文件导出
 
-大数据量导出是 excel-exporter 的核心优势场景：10 万行在浏览器 Worker 中执行，主线程不卡顿，Fast stream 约 0.8s 完成。
+大数据量导出是 Fast stream 路径的目标场景：10 万行在浏览器 Worker 中执行，主线程仅做一次结构化克隆，Fast stream 约 0.8s 完成。
 
 ## Mock 数据预览
 

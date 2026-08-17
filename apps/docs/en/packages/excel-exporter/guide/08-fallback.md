@@ -1,10 +1,10 @@
 # Fallback (SheetJS)
 
-The library guarantees "export always succeeds": when the WASM path is unavailable it automatically degrades to SheetJS.
+When the WASM path is unavailable, the library automatically degrades to SheetJS, so most failures still produce a file (one exception is listed under "When it triggers").
 
 ## When it triggers
 
-- The environment does not support `WebAssembly`;
+- The environment does not support `WebAssembly` (this only affects the main and Worker + Workbook paths; the ≥ 50,000-row stream path does not use WASM and is unaffected);
 - `modern-xlsx.wasm` fails to load (after `maxRetries` attempts, default 3);
 - The Worker path fails to initialize (e.g. workerUrl 404);
 - The build throws (e.g. an internal modern-xlsx build error). Note: an invalid sheet name is not rescuable here — the fallback re-validates the same name and fails, so the export resolves with `success: false`.
@@ -14,10 +14,10 @@ The library guarantees "export always succeeds": when the WASM path is unavailab
 | Dimension                        | modern-xlsx path | SheetJS fallback                                                                         |
 | -------------------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
 | `ExportResult.engine`            | `"modern-xlsx"`  | `"sheetjs"`                                                                              |
-| Cell styles                      | ✅ full          | ❌ stripped (SheetJS CE cannot write styles)                                             |
-| Width / freeze / filter / merges | ✅               | ❌                                                                                       |
-| FormatSpec                       | ✅               | ✅ (enum/padding/number/date semantics kept; dates become readable strings)              |
-| Number formats                   | ✅ `numFormat`   | ❌ `decimals` baked into stored value                                                    |
+| Cell styles                      | full             | stripped (SheetJS CE cannot write styles)                                                |
+| Width / freeze / filter / merges | supported        | not supported                                                                            |
+| FormatSpec                       | supported        | supported (enum/padding/number/date semantics kept; dates become readable strings)       |
+| Number formats                   | `numFormat`      | `decimals` baked into stored value                                                       |
 | Warning                          | —                | console prints `[excel-exporter] Falling back to SheetJS (styles stripped). Reason: ...` |
 
 ## Where SheetJS comes from
@@ -36,4 +36,4 @@ if (result.engine === "sheetjs") {
 }
 ```
 
-The fallback is a last-resort guarantee, not a regular path. When it fires, first check that the wasm URL is not 404 and that `configureWasm` was called before exporting.
+The fallback is an insurance path for failures, not a regular one. When it fires, first check that the wasm URL is not 404 and that `configureWasm` was called before exporting.

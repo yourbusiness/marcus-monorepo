@@ -16,7 +16,7 @@
 - 语言：TypeScript 5.x（`moduleResolution: bundler`）
 - 测试：Vitest；代码规范：ESLint 9 + Prettier
 - 版本/发布：Changesets（多包独立发版、自动 changelog、支持 prerelease）
-- CI/CD：GitHub Actions（`ci.yml` 校验、`release.yml` 自动发布 npm）
+- CI/CD：GitHub Actions（`ci.yml` 校验、`release.yml` 自动发布 npm、`deploy.yml` 部署本文档站到 GitHub Pages）
 
 ## 路线图
 

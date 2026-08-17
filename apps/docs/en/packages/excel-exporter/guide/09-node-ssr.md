@@ -4,12 +4,12 @@ In Node servers (including SSR) you don't need browser assets, but local filesys
 
 ## Environment differences
 
-| Dimension         | Browser              | Node / SSR                                  |
-| ----------------- | -------------------- | ------------------------------------------- |
-| Worker path       | ✅ available         | ❌ no Web Worker; falls back to main/stream |
-| Auto download     | ✅ triggers download | ❌ `triggerDownload` is a no-op             |
-| `download` option | defaults to true     | set `false` explicitly and handle the Blob  |
-| Large data        | worker + Fast stream | main → stream at ≥ 50k rows (main thread)   |
+| Dimension         | Browser              | Node / SSR                                 |
+| ----------------- | -------------------- | ------------------------------------------ |
+| Worker path       | available            | no Web Worker; falls back to main/stream   |
+| Auto download     | triggers download    | `triggerDownload` is a no-op               |
+| `download` option | defaults to true     | set `false` explicitly and handle the Blob |
+| Large data        | worker + Fast stream | main → stream at ≥ 50k rows (main thread)  |
 
 ## Export and write to disk
 

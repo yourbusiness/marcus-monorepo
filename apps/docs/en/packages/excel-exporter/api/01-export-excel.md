@@ -6,14 +6,14 @@
 exportExcel(options: ExportOptions): Promise<ExportResult>
 ```
 
-The single entry point. Routes to main / worker / stream by row count and environment, degrading to SheetJS when WASM is unavailable.
+The core entry point (convenience wrappers such as `exportTable` / `exportEcharts` delegate to it). Routes to main / worker / stream by row count and environment, degrading to SheetJS when WASM is unavailable.
 
 ## ExportOptions
 
 | Field        | Type                                               | Required | Description                                                                                                        |
 | ------------ | -------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
-| `sheets`     | `SheetConfig[]`                                    | ✅       | At least one sheet                                                                                                 |
-| `filename`   | `string`                                           | ✅       | Download name; `.xlsx` is appended if missing                                                                      |
+| `sheets`     | `SheetConfig[]`                                    | yes      | At least one sheet                                                                                                 |
+| `filename`   | `string`                                           | yes      | Download name; `.xlsx` is appended unless it already ends with it                                                  |
 | `mode`       | `"auto" \| "main" \| "worker" \| "stream"`         | —        | Default `"auto"`                                                                                                   |
 | `onProgress` | `(progress: number) => void`                       | —        | 0 → 1; incremental progress only on the stream path (every 1,000 rows); main and worker+Workbook fire just 0 and 1 |
 | `onPhase`    | `(phase: ExportPhase, durationMs: number) => void` | —        | `init` / `build` / `download` timings                                                                              |

@@ -1,6 +1,6 @@
 # marcus-monorepo
 
-pnpm + Turborepo 前端基建 monorepo，为多个后台应用提供统一的公共能力包。当前首个共享包是基于 [modern-xlsx](https://github.com/ABCrimson/modern-xlsx)（Rust + WASM）的高性能 Excel 导出引擎，后续将扩展 PDF 导出、文件上传、虚拟表格渲染等包。
+pnpm + Turborepo 前端基建 monorepo，为多个后台应用提供统一的公共能力包。当前首个共享包是基于 [modern-xlsx](https://github.com/ABCrimson/modern-xlsx)（Rust + WASM）的 Excel 导出引擎，后续将扩展 PDF 导出、文件上传、虚拟表格渲染等包。
 
 ## 当前包
 
@@ -22,17 +22,17 @@ pnpm typecheck   # TypeScript 类型检查
 
 ## 工程化
 
-| 关注点    | 选型                             | 说明                                                                   |
-| --------- | -------------------------------- | ---------------------------------------------------------------------- |
-| 包管理    | pnpm workspace                   | 硬链接节省磁盘，`workspace:*` 协议，严格依赖隔离                       |
-| 构建编排  | Turborepo                        | 并行构建 + 远程缓存，`^build` 自动编排包依赖顺序                       |
-| 包构建    | tsup                             | esbuild 驱动，TS → ESM + DTS 一把梭，统一 ESM-only                     |
-| 语言      | TypeScript 5.x                   | `moduleResolution: bundler`，`lib` 同时含 DOM 与 WebWorker             |
-| 代码规范  | ESLint 9 + Prettier              | flat config，`no-floating-promises` 防止遗漏 await                     |
-| 提交规范  | Husky + lint-staged + commitlint | Conventional Commits，配合 Changesets 自动 changelog                   |
-| 版本/发布 | Changesets                       | 多包独立发版、自动生成 changelog、支持 prerelease                      |
-| 测试      | Vitest                           | ESM 原生兼容，WASM 友好                                                |
-| CI/CD     | GitHub Actions                   | `ci.yml`（lint → typecheck → test → build）+ `release.yml`（自动发布） |
+| 关注点    | 选型                             | 说明                                                                                                     |
+| --------- | -------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 包管理    | pnpm workspace                   | 硬链接节省磁盘，`workspace:*` 协议，严格依赖隔离                                                         |
+| 构建编排  | Turborepo                        | 并行构建 + 本地缓存，`^build` 自动编排包依赖顺序                                                         |
+| 包构建    | tsup                             | esbuild 驱动，TS → ESM + DTS 一次完成，统一 ESM-only                                                     |
+| 语言      | TypeScript 5.x                   | `moduleResolution: bundler`，`lib` 同时含 DOM 与 WebWorker                                               |
+| 代码规范  | ESLint 9 + Prettier              | flat config，`no-floating-promises` 防止遗漏 await                                                       |
+| 提交规范  | Husky + lint-staged + commitlint | Conventional Commits，配合 Changesets 自动 changelog                                                     |
+| 版本/发布 | Changesets                       | 多包独立发版、自动生成 changelog、支持 prerelease                                                        |
+| 测试      | Vitest                           | ESM 原生兼容，WASM 友好                                                                                  |
+| CI/CD     | GitHub Actions                   | `ci.yml`（lint → typecheck → test → build）+ `release.yml`（自动发布）+ `deploy.yml`（文档站部署 Pages） |
 
 ## 目录结构
 
@@ -46,7 +46,7 @@ marcus-monorepo/
 │   │   └── dist/               # tsup 构建产物
 │   └── play/                   # 本地联调沙箱（React 19 + antd 6，private 包）
 ├── docs/                       # 设计文档
-│   └── excel-export-design.md  # Excel 导出核心设计文档（13 万字符）
+│   └── excel-export-design.md  # Excel 导出核心设计文档（约 16 万字符）
 ├── scripts/                    # 仓库级脚本（dev.mjs 统一 dev 启动器）
 ├── .changeset/                 # Changesets 配置
 ├── .github/workflows/          # CI/CD

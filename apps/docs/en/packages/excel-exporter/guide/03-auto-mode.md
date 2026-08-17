@@ -34,4 +34,4 @@ await exportExcel({ ..., mode: "main" });    // force main thread
 - **20,000 rows**: synchronous main-thread work is acceptable below this level; avoids unnecessary Worker startup;
 - **50,000 rows**: `Workbook.toBuffer()` shows a superlinear cliff beyond ~55k rows (~17.5s at 100k), while Fast stream stays at ~0.8s. `STREAM_THRESHOLD = 50_000` keeps a safety margin.
 
-> Trade-off: Stream v1 does not support cell styles or layout features (width/freeze/filter/merges). For fully-styled exports stay under 50k rows or split into multiple sheets.
+> Trade-off: Stream v1 does not support cell styles, header styles or layout features (width/freeze/filter/merges). For fully-styled exports stay under 50k rows or split into multiple sheets.

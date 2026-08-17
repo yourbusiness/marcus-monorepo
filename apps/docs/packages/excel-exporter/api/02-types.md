@@ -4,9 +4,9 @@
 
 | 字段           | 类型                        | 必填 | 说明                                        |
 | -------------- | --------------------------- | ---- | ------------------------------------------- |
-| `name`         | `string`                    | ✅   | 工作表名：≤ 31 字符，不含 `: \ / ? * [ ]`   |
-| `columns`      | `ColumnConfig[]`            | ✅   | 列定义                                      |
-| `data`         | `Record<string, unknown>[]` | ✅   | 行数据                                      |
+| `name`         | `string`                    | 是   | 工作表名：≤ 31 字符，不含 `: \ / ? * [ ]`   |
+| `columns`      | `ColumnConfig[]`            | 是   | 列定义                                      |
+| `data`         | `Record<string, unknown>[]` | 是   | 行数据                                      |
 | `headerStyle?` | `CellStyle`                 | —    | 表头行默认样式，可被列级 `headerStyle` 覆盖 |
 | `freezeRows?`  | `number`                    | —    | 冻结前 N 行表头                             |
 | `merges?`      | `MergeRange[]`              | —    | 合并单元格（相对数据区定位）                |
@@ -16,8 +16,8 @@
 
 | 字段           | 类型                     | 必填 | 说明                                                                             |
 | -------------- | ------------------------ | ---- | -------------------------------------------------------------------------------- |
-| `key`          | `string`                 | ✅   | 数据行字段名                                                                     |
-| `header`       | `string`                 | ✅   | 表头文字                                                                         |
+| `key`          | `string`                 | 是   | 数据行字段名                                                                     |
+| `header`       | `string`                 | 是   | 表头文字                                                                         |
 | `width?`       | `number`                 | —    | 列宽（Excel 字符单位）                                                           |
 | `style?`       | `CellStyle`              | —    | 数据单元格样式（不含表头）                                                       |
 | `headerStyle?` | `CellStyle`              | —    | 当前列表头样式，优先于表级 `headerStyle`                                         |

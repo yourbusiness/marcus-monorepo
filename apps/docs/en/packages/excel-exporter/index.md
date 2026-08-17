@@ -1,19 +1,19 @@
 # @marcusok/excel-exporter
 
-A high-performance Excel export engine built on [modern-xlsx](https://github.com/ABCrimson/modern-xlsx) (WASM) plus a custom Fast stream writer: declarative API, auto mode routing, full cell styling, Web Worker threading, fast large-file writes and a SheetJS fallback.
+An Excel export engine built on [modern-xlsx](https://github.com/ABCrimson/modern-xlsx) (WASM) plus a custom Fast stream writer: declarative API, auto mode routing, full cell styling, Web Worker threading, fast large-file writes and a SheetJS fallback.
 
 ## Capabilities
 
-| Capability                 | Description                                                                        |
-| -------------------------- | ---------------------------------------------------------------------------------- |
-| Declarative API            | Describe exports with `sheets + columns + data`; no cell-level coding              |
-| Auto mode routing          | `auto` picks main / worker / Fast stream by row count (20,000 / 50,000 thresholds) |
-| Full cell styling          | Font, fill, alignment, borders, number formats; 7 built-in `StylePresets`          |
-| Value formatting           | Structured `FormatSpec` (enum / date / datetime / number / padding)                |
-| Worker threading           | Main thread only does one structured clone; WASM runs in a Worker                  |
-| Streaming writes           | Custom `fast-xlsx.ts` + `fflate`, ~0.8s at 100k rows                               |
-| Layered fallback           | Auto-degrades to SheetJS (styles stripped) when WASM is unavailable                |
-| Progress / phase callbacks | `onProgress`, `onPhase` for visualizations and telemetry                           |
+| Capability                 | Description                                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Declarative API            | Describe exports with `sheets + columns + data`; no cell-level coding                                               |
+| Auto mode routing          | `auto` picks main / worker / Fast stream by row count (20,000 / 50,000 thresholds)                                  |
+| Full cell styling          | Font, fill, alignment, borders, number formats; 7 built-in `StylePresets`                                           |
+| Value formatting           | Structured `FormatSpec` (enum / date / datetime / number / padding)                                                 |
+| Worker threading           | Main thread only does one structured clone; building runs in a Worker (the ≥ 50k-row stream path does not use WASM) |
+| Streaming writes           | Custom `fast-xlsx.ts` + `fflate`, ~0.8s at 100k rows                                                                |
+| Layered fallback           | Auto-degrades to SheetJS (styles stripped) when WASM is unavailable                                                 |
+| Progress / phase callbacks | `onProgress`, `onPhase` for visualizations and telemetry                                                            |
 
 ## Install
 
@@ -62,4 +62,4 @@ await exportExcel({
 - peerDependencies: `modern-xlsx@^1.2.0` (required), `xlsx@>=0.18.5` (optional, fallback)
 - Environment: Node >= 22; browsers need WebAssembly support
 
-> Performance numbers are local measurements (real Chrome + Play's 6 columns). See [Performance](/en/packages/excel-exporter/guide/07-performance).
+> Performance numbers are local measurements (real Chrome, 6 mixed-type columns). See [Performance](/en/packages/excel-exporter/guide/07-performance).

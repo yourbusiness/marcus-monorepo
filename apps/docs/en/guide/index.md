@@ -16,7 +16,7 @@
 - Language: TypeScript 5.x (`moduleResolution: bundler`)
 - Tests: Vitest; linting: ESLint 9 + Prettier
 - Versioning/publishing: Changesets (independent versions, changelog, prerelease support)
-- CI/CD: GitHub Actions (`ci.yml` checks, `release.yml` publishes to npm)
+- CI/CD: GitHub Actions (`ci.yml` checks, `release.yml` publishes to npm, `deploy.yml` ships this docs site to GitHub Pages)
 
 ## Roadmap
 

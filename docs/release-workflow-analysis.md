@@ -1,6 +1,6 @@
 # Release 工作流逐行解读（`.github/workflows/release.yml`）
 
-> 阅读对象：完全没接触过"自动发布"的人。和 CI 那篇一样，每一步都先说"它在做什么"再说"为什么"，而且每条结论都能在本项目里找到真实证据。如果还没看 [ci-workflow-analysis.md](/C:/Users/wangbo/Desktop/marcus-monorepo/docs/ci-workflow-analysis.md)，建议先看那一篇，因为这边会用到里面的概念（PR、pnpm、Node 22、HUSKY 等）。
+> 阅读对象：完全没接触过"自动发布"的人。和 CI 那篇一样，每一步都先说"它在做什么"再说"为什么"，而且每条结论都能在本项目里找到真实证据。如果还没看 [ci-workflow-analysis.md](./ci-workflow-analysis.md)，建议先看那一篇，因为这边会用到里面的概念（PR、pnpm、Node 22、HUSKY 等）。
 
 ---
 
@@ -14,7 +14,7 @@ CI 文档讲的是"怎么保证代码质量"。这篇讲的是**另一件事：�
 - CI 是"交稿前的校对机器"。
 - **Release 是"印刷厂 + 发行商"**：它自动把你的书印好（构建），贴上版本号，然后摆到书店（npm）的货架上，让全世界的人都能 `npm install` 买走。
 
-这个项目要发布的"书"，就是那个 Excel 导出库 `@marcusok/excel-exporter`（当前版本 `0.1.2`，见 [packages/excel-exporter/package.json](/C:/Users/wangbo/Desktop/marcus-monorepo/packages/excel-exporter/package.json)）。
+这个项目要发布的"书"，就是那个 Excel 导出库 `@marcusok/excel-exporter`（当前版本 `1.0.3`，见 [packages/excel-exporter/package.json](../packages/excel-exporter/package.json)）。
 
 而且这事不是手动点的，是**全自动**的——只要你把代码合并到 main 分支，机器就会自己决定"要不要发新版本、发哪个版本"，你睡着了它也在发。
 
@@ -195,10 +195,10 @@ registry-url: https://registry.npmjs.org
 
 本项目用了 Changesets，证据：
 
-- 根 [package.json](/C:/Users/wangbo/Desktop/marcus-monorepo/package.json) 里装了 `@changesets/cli`，还定义了两个脚本：
+- 根 [package.json](../package.json) 里装了 `@changesets/cli`，还定义了两个脚本：
   - `"version-packages": "changeset version"` —— 用来"消化小纸条、算版本、写日志"。
   - `"release": "turbo run lint typecheck test build && changeset publish"` —— 先跑完整检查，再发布到 npm。
-- 配置文件 [.changeset/config.json](/C:/Users/wangbo/Desktop/marcus-monorepo/.changeset/config.json)：
+- 配置文件 [.changeset/config.json](../.changeset/config.json)：
 
 ```json
 {
@@ -209,11 +209,11 @@ registry-url: https://registry.npmjs.org
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": []
+  "ignore": ["@marcusok/play", "@marcusok/docs"]
 }
 ```
 
-关键几项：`baseBranch: "main"`（主分支是 main）、`access: "public"`（公开发布）、`updateInternalDependencies: "patch"`（包之间互相依赖时，按 patch 级别自动升）。
+关键几项：`baseBranch: "main"`（主分支是 main）、`access: "public"`（公开发布）、`updateInternalDependencies: "patch"`（包之间互相依赖时，按 patch 级别自动升）、`ignore`（不发版名单：`play` 与 `docs` 列在其中，changeset 对它们只跳过不发布，真正发到 npm 的只有 excel-exporter）。
 
 #### `changesets/action` 这个工具到底干嘛？
 
@@ -223,8 +223,8 @@ registry-url: https://registry.npmjs.org
 → 它执行 `version` 那条命令（这里是 `pnpm version-packages`，即 `changeset version`）：
 
 - 收集所有小纸条，算出该升到哪个版本号。
-- 自动改 [packages/excel-exporter/package.json](/C:/Users/wangbo/Desktop/marcus-monorepo/packages/excel-exporter/package.json) 里的 `version`。
-- 自动往 [packages/excel-exporter/CHANGELOG.md](/C:/Users/wangbo/Desktop/marcus-monorepo/packages/excel-exporter/CHANGELOG.md) 追加这次的更新内容。
+- 自动改 [packages/excel-exporter/package.json](../packages/excel-exporter/package.json) 里的 `version`。
+- 自动往 [packages/excel-exporter/CHANGELOG.md](../packages/excel-exporter/CHANGELOG.md) 追加这次的更新内容。
 - 吃掉这些小纸条（删掉 `.changeset/xxx.md` 文件）。
 - 把以上所有改动，打包成一个**自动提交的 PR**（标题就是 `title: "chore: release packages"`）。
 
@@ -240,11 +240,11 @@ registry-url: https://registry.npmjs.org
 
 不要以为这是理论，本项目已经实打实发布过了。看 git 历史：
 
-- **git tag（版本标签）有两个**：`@marcusok/excel-exporter@0.1.1`、`@marcusok/excel-exporter@0.1.2`。这些 tag 正是 `changeset publish` 自动打的。
+- **git tag（版本标签）**：`@marcusok/excel-exporter@0.1.1`、`@marcusok/excel-exporter@0.1.2`（写作本文时只有这两个；此后随每次发布累积，现已到 1.0.3）。这些 tag 正是 `changeset publish` 自动打的。
 - **真实的发布提交**：`3a5782f chore: release packages`，作者署名是 `github-actions[bot]`（机器人），正好对应 release.yml 里的 `commit: "chore: release packages"`。这条提交做的事，和 changeset 文档描述的一模一样：
   - 删掉了 `.changeset/solid-worlds-design.md`（消化掉那张小纸条）。
-  - 更新了 [packages/excel-exporter/CHANGELOG.md](/C:/Users/wangbo/Desktop/marcus-monorepo/packages/excel-exporter/CHANGELOG.md)（追加 0.1.2 的更新记录）。
-  - 把 [packages/excel-exporter/package.json](/C:/Users/wangbo/Desktop/marcus-monorepo/packages/excel-exporter/package.json) 的版本从 0.1.1 改成 0.1.2。
+  - 更新了 [packages/excel-exporter/CHANGELOG.md](../packages/excel-exporter/CHANGELOG.md)（追加 0.1.2 的更新记录）。
+  - 把 [packages/excel-exporter/package.json](../packages/excel-exporter/package.json) 的版本从 0.1.1 改成 0.1.2。
 - **还有两个机器人 PR**：git 历史里有 `Merge pull request #1` 和 `#2 from yourbusiness/changeset-release/main`，正是 changesets/action 自动创建的"发布准备 PR"，分支名 `changeset-release/main` 是它的固定名字。
 
 #### `commit` 和 `title` 两个小参数
@@ -291,10 +291,10 @@ env:
 
 两把钥匙名字不同，但指向的是**同一个 secret 值** `secrets.NPM_TOKEN`。区别只在于"谁去读它"：
 
-- `NODE_AUTH_TOKEN` —— 这是**真正干活的那个**。前面步骤 3 设了 `registry-url`，setup-node 会自动在 `~/.npmrc` 里写一行 `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`，最终 `npm publish` 上传时读的就是它。本项目 [docs/release-publish-logic.md](/C:/Users/wangbo/Desktop/marcus-monorepo/docs/release-publish-logic.md) 也写明："本项目走 setup-node 配的 `NODE_AUTH_TOKEN`，最终落到 `npm publish`"。
-- `NPM_TOKEN` —— 同样指向那个 secret，但在当前这套配置里**属于冗余**：publish 链路并不直接读它（[docs/changeset-walkthrough.md](/C:/Users/wangbo/Desktop/marcus-monorepo/docs/changeset-walkthrough.md) 里就是这么说的）。保留它不会出错，只是 changesets 生态的示例习惯都带上它。
+- `NODE_AUTH_TOKEN` —— 这是**真正干活的那个**。前面步骤 3 设了 `registry-url`，setup-node 会自动在 `~/.npmrc` 里写一行 `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`，最终 `npm publish` 上传时读的就是它。本项目 [docs/release-publish-logic.md](./release-publish-logic.md) 也写明："本项目走 setup-node 配的 `NODE_AUTH_TOKEN`，最终落到 `npm publish`"。
+- `NPM_TOKEN` —— 同样指向那个 secret，但在当前这套配置里**属于冗余**：publish 链路并不直接读它（[docs/changeset-walkthrough.md](./changeset-walkthrough.md) 里就是这么说的）。保留它不会出错，只是 changesets 生态的示例习惯都带上它。
 
-更精确地说：缺了 `NODE_AUTH_TOKEN`，`npm publish` 会报 401 未授权。本项目发布时踩过的真实坑（[docs/debug.md](/C:/Users/wangbo/Desktop/marcus-monorepo/docs/debug.md) 第 16 节）就是这个 token 的 scope 权限没覆盖 `@marcusok`，导致发布时 E404。
+更精确地说：缺了 `NODE_AUTH_TOKEN`，`npm publish` 会报 401 未授权。本项目发布时踩过的真实坑（[docs/debug.md](./debug.md) 第 16 节）就是这个 token 的 scope 权限没覆盖 `@marcusok`，导致发布时 E404。
 
 ### 3. `NPM_CONFIG_PROVENANCE: "true"` —— 给包贴"产地证明"
 
@@ -302,7 +302,7 @@ env:
 
 为什么要这个？因为 npm 上经常有人上传**冒牌包**（名字一样，里面塞恶意代码）。有了 provenance，下载的人可以验证："这个包是不是真的从官方仓库发的？" 这对开源库的安全信誉很重要。
 
-它依赖前面申请的 `id-token: write` 权限（用 OIDC 令牌来签名，不需要你手动保管签名密钥）。npm 官方很推荐开源包都开启它。**还有一个前提：仓库必须是 public（公开的）**，私有仓库没法签发 provenance。本项目是公开仓库，所以 [docs/debug.md](/C:/Users/wangbo/Desktop/marcus-monorepo/docs/debug.md) 的发布日志里能看到 `Signed provenance statement ... from GitHub Actions`，说明签名成功、`id-token: write` 确实生效。
+它依赖前面申请的 `id-token: write` 权限（用 OIDC 令牌来签名，不需要你手动保管签名密钥）。npm 官方很推荐开源包都开启它。**还有一个前提：仓库必须是 public（公开的）**，私有仓库没法签发 provenance。本项目是公开仓库，所以 [docs/debug.md](./debug.md) 的发布日志里能看到 `Signed provenance statement ... from GitHub Actions`，说明签名成功、`id-token: write` 确实生效。
 
 ---
 
@@ -359,7 +359,7 @@ env:
 - **`secrets.XXX` 是什么**：是你在 GitHub 仓库设置里存好的"密码"（比如 npm 的登录令牌），workflow 里用 `secrets.名字` 引用，但 GitHub 会在日志里把它们打码，不会泄露。
 - **为什么要 `fetch-depth: 0`**：和 CI 一样的道理，changesets 需要完整 git 历史来判断"哪些包变了、要发哪个版本"。
 - **`@v1` 为什么不用 `@main`**：固定用第 1 版，避免 changesets/action 哪天更新了行为变了，发布突然出问题。和 CI 里锁 `@v4` 一个道理。
-- **万一发布失败怎么办**：因为 `cancel-in-progress: false`，不会被打断；如果 `npm publish` 失败（比如令牌过期、网络问题），可以修好后重跑。注意：**npm 上同一个版本号只能发一次**，所以如果已经发上去了再失败，下次得换新版本号。本项目 [docs/debug.md](/C:/Users/wangbo/Desktop/marcus-monorepo/docs/debug.md) 里就记录过发布踩坑的排查过程（比如 turbo 严格模式、404、令牌权限等），遇到问题可以去翻。
+- **万一发布失败怎么办**：因为 `cancel-in-progress: false`，不会被打断；如果 `npm publish` 失败（比如令牌过期、网络问题），可以修好后重跑。注意：**npm 上同一个版本号只能发一次**，所以如果已经发上去了再失败，下次得换新版本号。本项目 [docs/debug.md](./debug.md) 里就记录过发布踩坑的排查过程（比如 turbo 严格模式、404、令牌权限等），遇到问题可以去翻。
 
 ---
 

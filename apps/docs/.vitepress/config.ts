@@ -75,7 +75,7 @@ validateRegistry();
  * a fork or rename.
  * `DOCS_BASE` still wins when a custom domain is used (set it to "/").
  * Note: changing the remote invalidates nothing in turbo's input hash, so after
- * changing `origin` run `pnpm docs:build --force` once.
+ * changing `origin` run `pnpm build:docs --force` once.
  */
 function resolveGithubRepo(): { owner: string; repo: string } {
   try {
@@ -144,7 +144,7 @@ function copyRuntimeAssets() {
         throw new Error(
           `[docs] runtime asset not found: ${asset.resolveFrom}${asset.through ? ` (through ${asset.through})` : ""}/${asset.file} ` +
             `(declared by ${p.npmName} runtimeAssets). ` +
-            "Run `pnpm docs:build` from the repo root (turbo builds deps first).",
+            "Run `pnpm build:docs` from the repo root (turbo builds deps first).",
         );
       }
       copyFileSync(src, dest);

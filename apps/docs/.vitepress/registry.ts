@@ -223,8 +223,8 @@ export const packages: PackageEntry[] = [
           },
         ],
         source: {
-          zh: "本机实测：真实 Chrome + Play 同款 6 列，auto 路径（毫秒）。",
-          en: "Measured locally: real Chrome + Play's 6 columns, auto path (ms).",
+          zh: "本机实测：真实 Chrome，6 列混合类型，auto 路径（毫秒）。",
+          en: "Measured locally: real Chrome, 6 mixed-type columns, auto path (ms).",
         },
       },
     ],
@@ -255,10 +255,10 @@ export const packages: PackageEntry[] = [
     highlights: [
       {
         icon: "🚀",
-        title: { zh: "高性能", en: "High Performance" },
+        title: { zh: "性能", en: "Performance" },
         details: {
-          zh: "Fast stream 核心，10 万行导出约 0.8s；Worker 多线程让主线程不被阻塞。",
-          en: "Fast stream core exports 100k rows in ~0.8s; Web Workers keep the main thread responsive.",
+          zh: "Fast stream 核心，10 万行导出约 0.8s（本机实测）；Worker 多线程避免长时间占用主线程。",
+          en: "Fast stream core exports 100k rows in ~0.8s (measured locally); Web Workers keep heavy work off the main thread.",
         },
       },
       {
@@ -281,8 +281,8 @@ export const packages: PackageEntry[] = [
         icon: "🛡️",
         title: { zh: "多级兜底", en: "Layered Fallbacks" },
         details: {
-          zh: "环境不支持或 WASM 加载失败时自动降级到 SheetJS，保证“一定能导出”。",
-          en: "Automatically degrades to SheetJS when WASM is unavailable — export always succeeds.",
+          zh: "环境不支持或 WASM 加载失败时自动降级到 SheetJS，多数异常下仍能拿到导出文件。",
+          en: "Automatically degrades to SheetJS when WASM is unavailable, so most failures still produce a file.",
         },
       },
     ],

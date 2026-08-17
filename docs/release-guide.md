@@ -39,9 +39,11 @@
     （要发版时才写）
 [4] git commit
     └─ husky 自动检查
-[5] git push ──────────────────→ [6] 两条机器人流水线同时启动：
+[5] git push ──────────────────→ [6] 机器人流水线同时启动：
                                      ├─ CI：跑质量检查（lint/test/build）
                                      │   （失败不影响发版，只是亮红灯）
+                                     ├─ Deploy Docs：apps/docs 等路径变更时
+                                     │   构建文档站并发布到 GitHub Pages
                                      └─ Release：发版机器人
                                          │
                                          ├─ 有 changeset？
@@ -125,7 +127,7 @@ pnpm install
 
 去 [npmjs.com/signup](https://www.npmjs.com/signup) 注册。
 
-> ⚠️ **大坑（真实踩过）**：npm 的 scope（包名里 `@` 后面那部分）归属规则是死的——`@xxx` 这个 scope 只属于**用户名或 org 名等于 `xxx`** 的账号。
+> **大坑（真实踩过）**：npm 的 scope（包名里 `@` 后面那部分）归属规则是死的——`@xxx` 这个 scope 只属于**用户名或 org 名等于 `xxx`** 的账号。
 >
 > 比如本项目包叫 `@marcusok/excel-exporter`，那 `@marcusok` 这个 scope 必须归你。两种方式：
 >
@@ -144,7 +146,7 @@ pnpm install
 
 ### 1.3.3 创建发布 token
 
-> ⚠️ **大坑（真实踩过）**：token 要在 scope 归属确认**之后**再建。如果先建 token、后建 org，token 的权限边界里不会包含那个 scope，发布会报 `E404 Not Found`（看起来像"包不存在"，其实是"token 没这个 scope 的权限"）。
+> **大坑（真实踩过）**：token 要在 scope 归属确认**之后**再建。如果先建 token、后建 org，token 的权限边界里不会包含那个 scope，发布会报 `E404 Not Found`（看起来像"包不存在"，其实是"token 没这个 scope 的权限"）。
 
 登录 npm → 头像 → **Access Tokens** → **Generate New Token** → 选 **Granular Access Token**：
 
@@ -194,7 +196,7 @@ GitHub Actions 跑在云端，要发版就得知道你的 npm token。但 token 
 
 npm 页面会渲染包里打进来的 README，并显示 package.json 里的 `repository` / `bugs` 链接。第一次发版前确认这几样：
 
-- **`repository.url` / `bugs.url`**：[packages/excel-exporter/package.json](/packages/excel-exporter/package.json) 里指向真实的 GitHub 仓库。当前填的是 `github.com/yourbusiness/marcus-monorepo`——发布前确认 `yourbusiness` 是你真实的 GitHub 账号或组织名，不是占位符。如果是占位符，npm 页面的 Repository 链接会指向死链，provenance 记录的来源仓库也对不上。
+- **`repository.url` / `bugs.url`**：[packages/excel-exporter/package.json](/packages/excel-exporter/package.json) 里指向真实的 GitHub 仓库。当前填的是 `github.com/yourbusiness/marcus-monorepo`——`yourbusiness` 已确认是本仓库真实的 GitHub owner（remote 与文档站均使用它），此项无需再动。填错的话，npm 页面的 Repository 链接会指向死链，provenance 记录的来源仓库也对不上。
 - **README 编码**：打进包里的 README 要是 UTF-8 无 BOM、没有乱码。PowerShell 的 `Get-Content`/`Set-Content` 默认按 GBK 处理，会把 UTF-8 的破折号（—）、`≥`、`⚠️` 等字符搞坏（本项目早期踩过，见 [debug.md](./debug.md) 第 9 节）。发版前扫一眼 README，或发完去 npm 页面看渲染对不对。
 
 ---
@@ -209,7 +211,7 @@ npm 页面会渲染包里打进来的 README，并显示 package.json 里的 `re
 
 ## 2.2 本地跑质量检查（提交前必做）
 
-> 🔧 **先看这里：哪些已经自动跑了**。pre-commit 钩子会在你 commit 时自动对改动文件跑 `eslint --fix` + `prettier --write`（见 2.3）；pre-push 钩子会在你 push 时自动跑 `typecheck` + `test` + `build`（见 2.6）。也就是说**格式、类型、测试、构建日常已经被钩子兜底**。本节的手动命令主要用于：① 钩子之前的主动验证；② 想精确复现 CI 行为（钩子的 `test` 设了 `RUN_PERF=0` 跳过性能基准，见下方说明）；③ 钩子被绕过时（如 `--no-verify`）。
+> **先看这里：哪些已经自动跑了**。pre-commit 钩子会在你 commit 时自动对改动文件跑 `eslint --fix` + `prettier --write`（见 2.3）；pre-push 钩子会在你 push 时自动跑 `typecheck` + `test` + `build`（见 2.6）。也就是说**格式、类型、测试、构建日常已经被钩子兜底**。本节的手动命令主要用于：① 钩子之前的主动验证；② 想精确复现 CI 行为（钩子的 `test` 设了 `RUN_PERF=0` 跳过性能基准，见下方说明）；③ 钩子被绕过时（如 `--no-verify`）。
 
 ```bash
 pnpm lint        # 代码风格检查（ESLint）
@@ -218,7 +220,7 @@ pnpm test        # 跑单元测试（Vitest）
 pnpm build       # 构建产物（tsup，产出 dist/）
 ```
 
-> ⚠️ **重要**：本地验证必须走**根目录的 `pnpm xxx`**（它会经过 turbo 调度），不要 cd 到 `packages/excel-exporter` 里直接跑。
+> **重要**：本地验证必须走**根目录的 `pnpm xxx`**（它会经过 turbo 调度），不要 cd 到 `packages/excel-exporter` 里直接跑。
 >
 > 为什么（真实踩过的坑）：CI 走的是根目录 `pnpm test` = `turbo run test`，中间隔着 turbo。turbo 默认会**过滤没在 turbo.json 声明的环境变量**。如果你在子目录直接跑 vitest，绕过了 turbo，本地"通过"的验证到 CI 上可能失效。**本地怎么验证，CI 就怎么跑，路径要完全一致**。
 
@@ -248,7 +250,7 @@ pnpm changeset
 
 完成后会在 `.changeset/` 下生成一个随机命名的 `.md` 文件。
 
-> ⚠️ **坑（真实踩过）**：`pnpm changeset` 命令不要拿来"测试"，因为生成的文件只要推到 main，机器人就会消费它、真的发版。验证流程时如果生成了 changeset，验完**一定要删掉**，别误发版。
+> **坑（真实踩过）**：`pnpm changeset` 命令不要拿来"测试"，因为生成的文件只要推到 main，机器人就会消费它、真的发版。验证流程时如果生成了 changeset，验完**一定要删掉**，别误发版。
 >
 > 看 `.changeset/` 下有哪些文件：`ls .changeset/*.md`（除了 `config.json`）。正式发版前确认里面只剩你真正想发的。
 
@@ -282,7 +284,7 @@ git commit -m "fix(excel-exporter): 修复了某个问题"
 
 > 这三个钩子只在本地拦你。CI 里设了 `HUSKY: "0"` 跳过 husky 钩子，但 CI workflow 里有独立的 commitlint 步骤（仅 PR 时跑，检查提交信息）和独立的 lint / typecheck / test / build 步骤——该查的 CI 自己查，只是不走 husky。
 
-> ⚠️ **关于 pre-push 跳过性能测试**：pre-push 的 `test` 带了 `RUN_PERF=0`，和 CI 完全一致——会跳过 `performance.test.ts`（那套测试对并发负载敏感，pre-push 同时跑 typecheck+test+build 三个 turbo 任务争抢 CPU 时会 flaky，比如 10k 行基准在空载 109ms、并发时能飙到 318ms 超阈值）。性能基准只在你想跑时手动 `pnpm test`（不设 `RUN_PERF`）。
+> **关于 pre-push 跳过性能测试**：pre-push 的 `test` 带了 `RUN_PERF=0`，和 CI 完全一致——会跳过 `performance.test.ts`（那套测试对并发负载敏感，pre-push 同时跑 typecheck+test+build 三个 turbo 任务争抢 CPU 时会 flaky，比如 10k 行基准在空载 109ms、并发时能飙到 318ms 超阈值）。性能基准只在你想跑时手动 `pnpm test`（不设 `RUN_PERF`）。
 
 ## 2.6 推送（push）
 
@@ -294,15 +296,15 @@ push 前会先触发 **pre-push 钩子**（见 2.3）：全量跑 `typecheck` + 
 
 > 如果确实需要绕过（极少，比如临时推一个明知测试会挂的 WIP 分支）：`git push origin main --no-verify`。但**别对 main 用**——main 上 CI 和发版都指望这些检查通过，绕过去等于把问题推给流水线。
 
-push 到 main 的瞬间，GitHub 上两条机器人流水线**同时启动**（见第三部分）。
+push 到 main 的瞬间，GitHub 上 CI、Release 两条机器人流水线**同时启动**（改动涉及 `apps/docs/` 等路径时，文档站部署流水线 `deploy.yml` 也会启动；见第三部分）。
 
 ---
 
 # 第三部分：自动发布（push 后自动发生，你只需要在网页点几下）
 
-## 3.1 两条流水线同时跑
+## 3.1 流水线同时跑
 
-push 到 main 后，GitHub Actions 同时启动两个 workflow：
+push 到 main 后，GitHub Actions 同时启动 CI 与 Release 两个 workflow（文档路径变更时另有 `deploy.yml` 部署文档站，见 3.5）：
 
 ### CI 流水线（`ci.yml`）——质量检查
 
@@ -338,7 +340,7 @@ turbo run lint typecheck test build && changeset publish
 
 先跑质量门禁（lint→typecheck→test→build），**全过**才执行 `changeset publish`（最终调用 `npm publish` 把包发出去）。
 
-> ⚠️ **关键理解**：`&&` 表示"前面全过了才跑后面"。所以如果 test 挂了，`changeset publish` 根本不会执行——包不会被发出去。这是质量门禁的护栏。前面踩的坑就是 test 里的性能测试挂了，把 publish 挡住。
+> **关键理解**：`&&` 表示"前面全过了才跑后面"。所以如果 test 挂了，`changeset publish` 根本不会执行——包不会被发出去。这是质量门禁的护栏。前面踩的坑就是 test 里的性能测试挂了，把 publish 挡住。
 
 ## 3.2 你要做的：审核并合并发版 PR
 
@@ -348,7 +350,7 @@ turbo run lint typecheck test build && changeset publish
 2. 看一眼里面的改动：版本号对不对、CHANGELOG 写得对不对。
 3. 确认没问题，点 **Merge pull request**。
 
-> ⚠️ **注意**：合并这个 PR = 往 main 又 push 了一次 = Release 流水线**再次启动**。这次 `.changeset/` 已经空了（机器人之前删掉了），所以走分支 B，执行真正的 `pnpm release` → `npm publish`。
+> **注意**：合并这个 PR = 往 main 又 push 了一次 = Release 流水线**再次启动**。这次 `.changeset/` 已经空了（机器人之前删掉了），所以走分支 B，执行真正的 `pnpm release` → `npm publish`。
 >
 > 这就是为什么"每次发版要碰 main 两次"。
 
@@ -371,7 +373,11 @@ turbo run lint typecheck test build && changeset publish
 
 关键认知：**没有 changeset 时，Release 仍然会 publish 已经 bump 好的版本**。changeset 只决定"要不要 bump"，publish 看的是"本地版本是不是比 npm 新"。
 
-> ⚠️ **不要**为了补发而再写一个 changeset。那会把版本从 `0.1.3` 再 bump 成 `0.1.4`，`0.1.3` 就被永久跳过、发不出去了。发版失败时走上面两条路，别动 changeset。
+> **不要**为了补发而再写一个 changeset。那会把版本从 `0.1.3` 再 bump 成 `0.1.4`，`0.1.3` 就被永久跳过、发不出去了。发版失败时走上面两条路，别动 changeset。
+
+## 3.5 文档站部署（`deploy.yml`）
+
+push 到 main 且改动命中 `apps/docs/**`、`packages/**` 等路径（或手动 workflow_dispatch）时，`deploy.yml` 会构建 VitePress 文档站并发布到 GitHub Pages（https://yourbusiness.github.io/marcus-monorepo/ ）。它与发版无关，失败不影响 npm 包。
 
 ---
 
@@ -470,7 +476,7 @@ GitHub Actions 的免费 runner 是"共享电脑"——同一台机器上跑着�
 
 用"绝对时间"做断言（`期望耗时 < 1500ms`）在这种环境下必然时好时坏（flake）。所以本项目的做法：性能测试在 CI 上跳过（`RUN_PERF=0`），只在本地当"回归看门狗"用。
 
-顺带一提：[turbo.json](/turbo.json) 的 `globalEnv` 里还声明了 `PERF_TIGHT`，它和 `RUN_PERF` 是两个不同的本地开关——`RUN_PERF=0` 管"跑不跑"（CI 用，跳过 perf），`PERF_TIGHT=1` 管"严不严"（本地用）。平时 perf 测试的阈值留了 1.5 倍余量（`SLACK = 1.5`）防本地机器抖动；想严格查回归时设 `PERF_TIGHT=1`，余量收紧到 1.0 倍（`SLACK = 1.0`），要求测试跑出基线本身的成绩。因为 CI 跳过了 perf，`PERF_TIGHT` 也只在本地有意义。
+顺带一提：[turbo.json](/turbo.json) 的 `globalEnv` 里还声明了 `PERF_TIGHT`。历史上它和 `RUN_PERF` 是两个不同的本地开关——`RUN_PERF=0` 管"跑不跑"（CI 用，跳过 perf），`PERF_TIGHT=1` 管"严不严"（本地用，当时可把 `SLACK` 余量从 1.5 倍收紧到 1.0 倍）。该机制现已移除：`performance.test.ts` 里 `SLACK` 恒为 1.0，设 `PERF_TIGHT` 不再产生任何效果，turbo.json 里的声明属于残留。
 
 ## 5.3 为什么环境变量要"层层放行"
 

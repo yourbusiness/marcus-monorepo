@@ -10,15 +10,15 @@
 
 Changesets 在本项目里不是一个单独的命令，而是横跨好几个文件协作：
 
-| 文件                                                                            | 作用                                                                                            |
-| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [.changeset/config.json](../.changeset/config.json)                             | Changesets 的核心配置：changelog 生成器、发版范围、版本联动策略、baseBranch                     |
-| `.changeset/*.md`（除 config.json）                                             | 每次发版的"说明书"，`pnpm changeset` 生成，`changeset version` 消费后删除。当前为空（无待发版） |
-| [package.json](../package.json)                                                 | 三个脚本：`changeset` / `version-packages` / `release`，外加 `@changesets/cli` 依赖             |
-| [packages/excel-exporter/package.json](../packages/excel-exporter/package.json) | 被发布的包：版本号、`files`、`publishConfig`、`exports`                                         |
-| [packages/excel-exporter/CHANGELOG.md](../packages/excel-exporter/CHANGELOG.md) | `changeset version` 自动维护的更新日志                                                          |
-| [.github/workflows/release.yml](../.github/workflows/release.yml)               | 接入 `changesets/action`，在 push main 时自动跑 version 或 publish                              |
-| [.github/workflows/ci.yml](../.github/workflows/ci.yml)                         | 独立的质量检查流水线，和 Release 互不阻塞                                                       |
+| 文件                                                                            | 作用                                                                                                         |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| [.changeset/config.json](../.changeset/config.json)                             | Changesets 的核心配置：changelog 生成器、发版范围、版本联动策略、baseBranch                                  |
+| `.changeset/*.md`（除 config.json）                                             | 每次发版的"说明书"，`pnpm changeset` 生成，`changeset version` 消费后删除（目录下有 `.md` 即处于待发版状态） |
+| [package.json](../package.json)                                                 | 三个脚本：`changeset` / `version-packages` / `release`，外加 `@changesets/cli` 依赖                          |
+| [packages/excel-exporter/package.json](../packages/excel-exporter/package.json) | 被发布的包：版本号、`files`、`publishConfig`、`exports`                                                      |
+| [packages/excel-exporter/CHANGELOG.md](../packages/excel-exporter/CHANGELOG.md) | `changeset version` 自动维护的更新日志                                                                       |
+| [.github/workflows/release.yml](../.github/workflows/release.yml)               | 接入 `changesets/action`，在 push main 时自动跑 version 或 publish                                           |
+| [.github/workflows/ci.yml](../.github/workflows/ci.yml)                         | 独立的质量检查流水线，和 Release 互不阻塞                                                                    |
 
 ---
 
@@ -33,7 +33,7 @@ Changesets 在本项目里不是一个单独的命令，而是横跨好几个文
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": []
+  "ignore": ["@marcusok/play", "@marcusok/docs"]
 }
 ```
 
@@ -44,7 +44,7 @@ Changesets 在本项目里不是一个单独的命令，而是横跨好几个文
 - **`access`**：发布到 npm 时的可见性。`public` = 公开包。对于 scoped 包（`@marcusok/...`），npm 默认是 restricted（私有），所以这里显式声明 `public` 是必需的，否则 changesets publish 会按 scoped 默认值处理而出错。`packages/excel-exporter/package.json` 里也有 `publishConfig.access: "public"`——那是手动 `npm publish` 时生效的字段；两处都写上，覆盖 changesets 发布和手动发布两条路径。
 - **`baseBranch: "main"`**：Changesets 把哪个分支当作「基线」来计算「有哪些新改动需要发版」。`changesets/action` 跑 version 时，就是基于这个分支的 diff 判断该消费哪些 changeset。本项目主干是 main，所以填 main。
 - **`updateInternalDependencies: "patch"`**：**多包联动策略**。当 monorepo 里包 A 依赖包 B，且 B 发版时，A 的依赖版本要不要跟着涨、涨多少。`patch` 表示按 patch 级别涨。当前只有 `excel-exporter` 一个发布包，这条暂时不生效；等以后拆出第二个包（比如内部共享工具包）才会真正起作用。
-- **`ignore: []`**：即使有针对这些包的 changeset，`changeset publish` 也跳过不发。用于「只 bump 不发到 npm」的内部包。当前为空。
+- **`ignore`**：即使有针对这些包的 changeset，`changeset publish` 也跳过不发。用于「只 bump 不发到 npm」的内部包。当前列了 `@marcusok/play`（本地联调沙箱）与 `@marcusok/docs`（文档站），两者都不需要发到 npm。
 
 ---
 
@@ -93,7 +93,7 @@ Changesets 在本项目里不是一个单独的命令，而是横跨好几个文
 turbo run lint typecheck test build && changeset publish
 ```
 
-前半段是质量门禁：turbo 并行跑 lint / typecheck / test / build（这四个任务在 turbo.json 里没声明互相依赖，turbo 会并行调度；只有 build 带 `^build`，在单包场景下也不产生串行）。后半段 `&&` 表示**全过才发**——turbo 整体退出码非 0 时 changeset publish 不会执行。`changeset publish` 真正发包时，会先查 npm registry，只有本地版本比线上新的包才调 `npm publish`，已发布的跳过（幂等）。
+前半段是质量门禁：turbo 跑 lint / typecheck / test / build（lint、typecheck、build 在 turbo.json 里都声明了 `"dependsOn": ["^build"]`，会先构建被依赖的包再执行；test 无此声明）。后半段 `&&` 表示**全过才发**——turbo 整体退出码非 0 时 changeset publish 不会执行。`changeset publish` 真正发包时，会先查 npm registry，只有本地版本比线上新的包才调 `npm publish`，已发布的跳过（幂等）。
 
 > 为什么门禁放在 publish 这一步、而不是 version 那一步？因为 version PR 只改版本号和 CHANGELOG，不涉及代码能不能编译；真正的代码质量把关放在发包前最合理，避免「版本号已经发出去，但代码其实是坏的」。
 
@@ -175,9 +175,9 @@ env:
 Changesets 不是无脑发所有包，有两道筛选：
 
 1. **`package.json` 的 `private` 字段**：根 [package.json](../package.json) 是 `"private": true`，永远不会被发布（它是工作区根，只是个壳）。`packages/excel-exporter/package.json` 没设 `private`（默认 false），才会被发布。
-2. **`config.json` 的 `ignore`**：即使包不是 private，也可以列进 `ignore` 让它「只 bump 不发」。当前为空。
+2. **`config.json` 的 `ignore`**：即使包不是 private，也可以列进 `ignore` 让它「只 bump 不发」。当前列了 `@marcusok/play` 与 `@marcusok/docs`（本地沙箱与文档站，只参与工作区内部引用，不发 npm）。
 
-所以本项目只有 `@marcusok/excel-exporter` 一个包会真正发到 npm。根包 `marcusok`（version 0.0.0）只在工作区内部存在，changeset 会自动忽略它。
+所以本项目只有 `@marcusok/excel-exporter` 一个包会真正发到 npm。根包 `marcus-monorepo`（version 0.0.0，private）只在工作区内部存在，changeset 会自动忽略它。
 
 ### 包发布时打进哪些文件
 
@@ -193,7 +193,7 @@ Changesets 不是无脑发所有包，有两道筛选：
 
 ## 7. CHANGELOG 的真实样子
 
-[packages/excel-exporter/CHANGELOG.md](../packages/excel-exporter/CHANGELOG.md) 是 `changeset version` 自动维护的，当前内容：
+[packages/excel-exporter/CHANGELOG.md](../packages/excel-exporter/CHANGELOG.md) 是 `changeset version` 自动维护的（最新条目见该文件头部；以下为 0.1.x 时期的示例片段）：
 
 ```markdown
 # @marcusok/excel-exporter
@@ -251,8 +251,8 @@ config.json 里 `commit: false` 不是「不提交版本改动」，而是「`ch
 
 ---
 
-## 9. 当前仓库状态快照
+## 9. 当前仓库状态快照（2026-08-17，1.0.3 发布后）
 
 - `.changeset/` 下只有 `config.json`，无待消费的 changeset 文件 → 处于「干净」状态，没有待发版本。
-- `packages/excel-exporter/package.json` 版本 `0.1.2`，CHANGELOG 最新到 `0.1.2`，npm 上也是 `0.1.2` → 本地与线上一致，没有超前。
+- `packages/excel-exporter/package.json` 版本 `1.0.3`，CHANGELOG 最新到 `1.0.3`，npm 上也是 `1.0.3` → 本地与线上一致，没有超前。
 - 这意味着如果现在直接 push 一次代码（不带 changeset），release.yml 走 publish 分支，`changeset publish` 发现版本一致，no-op，不会发任何东西。这是正常的安全行为。

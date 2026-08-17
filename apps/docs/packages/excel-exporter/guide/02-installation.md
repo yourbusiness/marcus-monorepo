@@ -76,12 +76,12 @@ configureWasm({
 
 ### configureWasm 参数
 
-| 参数         | 类型            | 默认值   | 说明                                                |
-| ------------ | --------------- | -------- | --------------------------------------------------- |
-| `wasmUrl`    | `string \| URL` | —        | 自托管 WASM 地址，生产强烈建议显式配置避免 CDN 漂移 |
-| `workerUrl`  | `string \| URL` | —        | `export.worker.js` 地址，worker 模式必填            |
-| `timeoutMs`  | `number`        | `10_000` | 单次加载超时                                        |
-| `maxRetries` | `number`        | `3`      | 最大重试次数（指数退避：300ms / 600ms / 1200ms）    |
+| 参数         | 类型            | 默认值   | 说明                                                            |
+| ------------ | --------------- | -------- | --------------------------------------------------------------- |
+| `wasmUrl`    | `string \| URL` | —        | 自托管 WASM 地址，生产强烈建议显式配置避免 CDN 漂移             |
+| `workerUrl`  | `string \| URL` | —        | `export.worker.js` 地址，worker 模式必填                        |
+| `timeoutMs`  | `number`        | `10_000` | 单次加载超时                                                    |
+| `maxRetries` | `number`        | `3`      | 最大尝试次数；默认 3 次尝试，失败后按 300ms、600ms 指数退避等待 |
 
 `configureWasm` 是合并语义：仅当 `wasmUrl` 变化时才重置已加载的 WASM 实例，只改超时/重试不会造成重复初始化。
 

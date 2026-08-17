@@ -25,7 +25,7 @@ await exportExcel({
 });
 ```
 
-浏览器中运行会自动下载 `hello.xlsx`；`filename` 不传后缀时自动补 `.xlsx`。
+浏览器中运行会自动下载 `hello.xlsx`；`filename` 不以 `.xlsx` 结尾时，末尾自动追加 `.xlsx`。
 
 ## 带上样式与格式化
 

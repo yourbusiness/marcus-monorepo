@@ -22,11 +22,11 @@ The WASM path failed or is unsupported, so the library degraded to the SheetJS f
 
 ### Exporting 100k rows is very slow (>15s)
 
-You are on the `main` + `Workbook.toBuffer()` path, which has a cliff beyond ~55k rows. Keep `mode: "auto"` (~0.8s at 100k rows), or set `mode: "stream"` / `mode: "worker"` explicitly. See [auto mode](/en/packages/excel-exporter/guide/03-auto-mode).
+You are most likely on the `main` + `Workbook.toBuffer()` path, which has a cliff beyond ~55k rows. Keep `mode: "auto"` (~0.8s at 100k rows), or set `mode: "stream"` / `mode: "worker"` explicitly. See [auto mode](/en/packages/excel-exporter/guide/03-auto-mode).
 
 ### Styles do not apply in stream mode
 
-Stream (v1) does not support cell styles or layout features such as width, freeze, filter and merges (a console warning is printed). Keep exports under 50k rows when you need full styling. See [Worker & streaming](/en/packages/excel-exporter/guide/06-worker-stream).
+Stream (v1) does not support cell styles, header styles or layout features such as width, freeze, filter and merges (a console warning is printed). Keep exports under 50k rows when you need full styling. See [Worker & streaming](/en/packages/excel-exporter/guide/06-worker-stream).
 
 ### Is my data uploaded anywhere?
 

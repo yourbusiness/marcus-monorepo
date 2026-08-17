@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: "MarcusOK"
-  text: "High-performance frontend libraries"
-  tagline: Declarative, high-performance, composable TypeScript libraries for admin products. The flagship package is an Excel export engine powered by modern-xlsx and a custom Fast stream writer.
+  text: "Frontend libraries for admin products"
+  tagline: Declarative, composable TypeScript libraries for admin products. The flagship package is an Excel export engine powered by modern-xlsx and a custom Fast stream writer.
   actions:
     - theme: brand
       text: Get Started
@@ -26,7 +26,7 @@ hero:
 
 ## Performance Snapshot
 
-Fast stream completes a 100k-row export in ~0.8s, while the batch serialization path hits a performance cliff.
+Fast stream completes a 100k-row export in ~0.8s, while the same engine's Workbook path slows sharply beyond ~55k rows (17.5s at 100k).
 
 <ClientOnly>
   <BenchmarkChart />

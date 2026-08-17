@@ -6,14 +6,14 @@
 exportExcel(options: ExportOptions): Promise<ExportResult>
 ```
 
-唯一入口函数。根据数据量与环境自动路由到 main / worker / stream，WASM 不可用时降级 SheetJS。
+核心入口函数（`exportTable` / `exportEcharts` 等便捷封装最终都委托给它）。根据数据量与环境自动路由到 main / worker / stream，WASM 不可用时降级 SheetJS。
 
 ## ExportOptions
 
 | 字段         | 类型                                               | 必填 | 说明                                                                                             |
 | ------------ | -------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------ |
-| `sheets`     | `SheetConfig[]`                                    | ✅   | 工作表配置，至少一个                                                                             |
-| `filename`   | `string`                                           | ✅   | 下载文件名，缺 `.xlsx` 后缀自动补全                                                              |
+| `sheets`     | `SheetConfig[]`                                    | 是   | 工作表配置，至少一个                                                                             |
+| `filename`   | `string`                                           | 是   | 下载文件名，不以 `.xlsx` 结尾时末尾自动追加                                                      |
 | `mode`       | `"auto" \| "main" \| "worker" \| "stream"`         | —    | 默认 `"auto"`，按行数自动路由                                                                    |
 | `onProgress` | `(progress: number) => void`                       | —    | 0 → 1；分段进度仅 stream 路径有（每 1000 行上报一次），main 与 worker+Workbook 只回调首尾 0 与 1 |
 | `onPhase`    | `(phase: ExportPhase, durationMs: number) => void` | —    | `init` / `build` / `download` 阶段耗时                                                           |

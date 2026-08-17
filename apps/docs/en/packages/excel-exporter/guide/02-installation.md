@@ -76,12 +76,12 @@ configureWasm({
 
 ### configureWasm options
 
-| Option       | Type            | Default  | Description                                                      |
-| ------------ | --------------- | -------- | ---------------------------------------------------------------- |
-| `wasmUrl`    | `string \| URL` | —        | Self-hosted WASM URL; explicitly configuring it avoids CDN drift |
-| `workerUrl`  | `string \| URL` | —        | `export.worker.js` URL; required for worker mode                 |
-| `timeoutMs`  | `number`        | `10_000` | Per-attempt load timeout                                         |
-| `maxRetries` | `number`        | `3`      | Max retries (exponential backoff: 300ms / 600ms / 1200ms)        |
+| Option       | Type            | Default  | Description                                                         |
+| ------------ | --------------- | -------- | ------------------------------------------------------------------- |
+| `wasmUrl`    | `string \| URL` | —        | Self-hosted WASM URL; explicitly configuring it avoids CDN drift    |
+| `workerUrl`  | `string \| URL` | —        | `export.worker.js` URL; required for worker mode                    |
+| `timeoutMs`  | `number`        | `10_000` | Per-attempt load timeout                                            |
+| `maxRetries` | `number`        | `3`      | Max attempts; 3 by default — failed attempts wait 300ms, then 600ms |
 
 `configureWasm` merges options: only a changed `wasmUrl` resets an already-loaded WASM instance; changing timeouts/retries alone never causes re-initialization.
 

@@ -4,12 +4,12 @@ Node 服务端（含 SSR）无需部署浏览器静态资源，但本地文件�
 
 ## 环境差异
 
-| 维度            | 浏览器               | Node / SSR                             |
-| --------------- | -------------------- | -------------------------------------- |
-| Worker 路径     | ✅ 可用              | ❌ 无 Web Worker，自动回退 main/stream |
-| 自动下载        | ✅ 触发浏览器下载    | ❌ `triggerDownload` 为 no-op          |
-| `download` 参数 | 默认 true            | 建议显式 `false`，自行处理 Blob        |
-| 大数据量        | worker + Fast stream | main → ≥ 5 万行 stream（主线程执行）   |
+| 维度            | 浏览器               | Node / SSR                           |
+| --------------- | -------------------- | ------------------------------------ |
+| Worker 路径     | 可用                 | 无 Web Worker，自动回退 main/stream  |
+| 自动下载        | 触发浏览器下载       | `triggerDownload` 为 no-op           |
+| `download` 参数 | 默认 true            | 建议显式 `false`，自行处理 Blob      |
+| 大数据量        | worker + Fast stream | main → ≥ 5 万行 stream（主线程执行） |
 
 ## 服务端导出并落盘
 

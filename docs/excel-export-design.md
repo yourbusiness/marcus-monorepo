@@ -18,7 +18,7 @@
 >
 > 1. **`Workbook.toBuffer()` 塌方属实（v1.9 判断正确）**。二次复现：10万行 toBuffer 单步 **17,339ms**（范围 17,190–17,970，与 v1.9 的 17.3–18.3s 几乎完全吻合）。塌方在 toBuffer 序列化（占 10万行总耗时 98.9%），`sheetAddAoa` 始终线性（10万行 199ms）。超二次：50k→80k 行数 ×1.6，耗时 ×14.6。**结论：≥5 万行必须走 stream，v1.9 架构方向正确。**
 >
-> 2. **⚠️ v2.0 修正：`finish()` 不是 3ms，是 ~90ms**（v1.9 记串了，把 `create()+startSheet()` 的 ~4ms 误记为 finish）。二次实测 6 次取中位：`finish()` = **93ms**（范围 92–128）。这不改变"stream 比 workbook 快 11 倍"的大结论，但 stream 10万行全流程实测为 **~1,548ms**（v1.9 写 1630ms，误差 < 6%，吻合），其中 writeRow 循环 ~1,451ms + finish ~93ms。
+> 2. **v2.0 修正：`finish()` 不是 3ms，是 ~90ms**（v1.9 记串了，把 `create()+startSheet()` 的 ~4ms 误记为 finish）。二次实测 6 次取中位：`finish()` = **93ms**（范围 92–128）。这不改变"stream 比 workbook 快 11 倍"的大结论，但 stream 10万行全流程实测为 **~1,548ms**（v1.9 写 1630ms，误差 < 6%，吻合），其中 writeRow 循环 ~1,451ms + finish ~93ms。
 >
 > 3. **v1.9 的 format 联合类型调用存在运行时崩溃缺陷（v2.0 新增）**：4.4 定义 `format?: FormatSpec | 函数`，但 4.7/4.8 的 builder 代码写的是 `col.format(raw, item)`——当用户传 FormatSpec 对象（v1.9 推荐的 worker 兼容方式）时，抛 `TypeError: col.format is not a function`（已最小复现）。4.4 定义的 `applyFormat` 从未被任何 builder 调用。v2.0 修复：引入 `resolveCellFormat()` 统一分流（函数直接调，FormatSpec 走 applyFormat），并在 worker 入口剥函数。详见 4.4/4.7/4.8/4.9。
 >
@@ -44,9 +44,9 @@
 
 > 📐 **列数基准**：以下耗时阈值均以 **4 列**为标准。列数缩放见下方「列数缩放规则」。
 >
-> ⚠️ **v2.0 关键修正：验收口径合并为「首次导出」单一口径**。v1.9 把验收拆成"稳态（同进程第二次）/首次"两套，并用"稳态 <1000ms"凑 10 万行指标——但"稳态"在真实浏览器几乎不存在（用户每次点导出都是独立动作，Worker 可能已被回收）。v2.0 统一用首次口径（最贴近真实用户体验），指标对齐**实测可达水平**。
+> **v2.0 关键修正：验收口径合并为「首次导出」单一口径**。v1.9 把验收拆成"稳态（同进程第二次）/首次"两套，并用"稳态 <1000ms"凑 10 万行指标——但"稳态"在真实浏览器几乎不存在（用户每次点导出都是独立动作，Worker 可能已被回收）。v2.0 统一用首次口径（最贴近真实用户体验），指标对齐**实测可达水平**。
 >
-> ⚠️ **v2.0 性能指标基线调整说明（已被 v2.5 覆盖）**：原始需求为"5万行<500ms / 10万行<1000ms"。经两次独立进程真机实测证明，这两个硬指标在 modern-xlsx@1.2.0 下**结构性不可达**：① 5 万行只能走 Workbook（stream 5万实测 824ms 比 Workbook 648ms 更慢，且 stream 不支持完整样式），Workbook 5 万行 toBuffer 单步实测 512ms，加 sheetAddAoa 共 ~620ms，无优化空间（WriteOptions 无压缩级别可调）；② 10 万行只能走 stream（toBuffer 塌方 17 秒），stream 全流程实测 ~1,548ms。v2.5 因此不再使用 modern-xlsx streaming，改用自研 fflate minimal writer，恢复原始硬指标。
+> **v2.0 性能指标基线调整说明（已被 v2.5 覆盖）**：原始需求为"5万行<500ms / 10万行<1000ms"。经两次独立进程真机实测证明，这两个硬指标在 modern-xlsx@1.2.0 下**结构性不可达**：① 5 万行只能走 Workbook（stream 5万实测 824ms 比 Workbook 648ms 更慢，且 stream 不支持完整样式），Workbook 5 万行 toBuffer 单步实测 512ms，加 sheetAddAoa 共 ~620ms，无优化空间（WriteOptions 无压缩级别可调）；② 10 万行只能走 stream（toBuffer 塌方 17 秒），stream 全流程实测 ~1,548ms。v2.5 因此不再使用 modern-xlsx streaming，改用自研 fflate minimal writer，恢复原始硬指标。
 
 **验收口径表（v2.0，首次导出，4 列基准）**：
 
@@ -58,15 +58,15 @@
 | 失败率  | 内存溢出失败率 = 0     | —                                         | Fast stream 单文件内存可控                      | round-trip 校验通过              |
 | 复用率  | 所有 App 接入率 100%   | —                                         | 共享包                                          | —                                |
 
-> 📌 **v2.6 路由口径变更**：v2.0 表原按 `WORKER_THRESHOLD=500` 把 1 万行路由到 worker（主线程阻塞预算 ≤16ms 由入向克隆 9ms 支撑）。现行 `WORKER_THRESHOLD=20_000`（提交 0c0fbd5）下，浏览器 1 万行 auto 走 **main**，主线程阻塞约 120ms 量级（Node 实测 ~117ms，4 列）——产品决策为「<20,000 行接受主线程短阻塞、≥20,000 行才进 Worker」（见 README「Worker 阈值 20,000 行」）。5 万/10 万行仍为 worker 路径，主线程阻塞预算（克隆 46/94ms）不变。
+> **v2.6 路由口径变更**：v2.0 表原按 `WORKER_THRESHOLD=500` 把 1 万行路由到 worker（主线程阻塞预算 ≤16ms 由入向克隆 9ms 支撑）。现行 `WORKER_THRESHOLD=20_000`（提交 0c0fbd5）下，浏览器 1 万行 auto 走 **main**，主线程阻塞约 120ms 量级（Node 实测 ~117ms，4 列）——产品决策为「<20,000 行接受主线程短阻塞、≥20,000 行才进 Worker」（见 README「Worker 阈值 20,000 行」）。5 万/10 万行仍为 worker 路径，主线程阻塞预算（克隆 46/94ms）不变。
 
-> 📌 **关于实测口径（v2.4 修订）**：1.2 表与 5.3 调度表中的实测耗时（1万 109ms / 5万 ~850ms（stream）/ 10万 1,548ms）均为 **Node 单线程 WASM-core 计时**（`sheetAddAoa`+`toBuffer` / `writeRow`+`finish`），作为 worker 内等价 WASM 工作的代理依据——worker 线程执行的是同一套 WASM 调用，耗时相当；但 worker 端到端还叠加入向结构化克隆（1万 9ms / 5万 46ms / 10万 94ms）、Worker 启动与 WASM 首次编译、出向 Transferable 回传，**从未实测**，属 7.3 Playwright 计划（当前未实现，见该节）。表中「端到端耗时上限」为验收目标值，其达成须以 7.3 浏览器端到端为准，不能由 Node WASM-core 数字直接断定。
+> **关于实测口径（v2.4 修订）**：1.2 表与 5.3 调度表中的实测耗时（1万 109ms / 5万 ~850ms（stream）/ 10万 1,548ms）均为 **Node 单线程 WASM-core 计时**（`sheetAddAoa`+`toBuffer` / `writeRow`+`finish`），作为 worker 内等价 WASM 工作的代理依据——worker 线程执行的是同一套 WASM 调用，耗时相当；但 worker 端到端还叠加入向结构化克隆（1万 9ms / 5万 46ms / 10万 94ms）、Worker 启动与 WASM 首次编译、出向 Transferable 回传，**从未实测**，属 7.3 Playwright 计划（当前未实现，见该节）。表中「端到端耗时上限」为验收目标值，其达成须以 7.3 浏览器端到端为准，不能由 Node WASM-core 数字直接断定。
 
-> 📌 **关于主线程阻塞预算（v2.6 修订）**：浏览器交互导出中 **≥20,000 行**（现行 `WORKER_THRESHOLD`，提交 0c0fbd5 起；v2.0 时为 ≥500 行）在 Worker 线程执行 WASM 工作，主线程只做一次 `postMessage(options)` 结构化克隆。实测结构化克隆开销：1万行 9ms / 5万行 46ms / 10万行 94ms。据此 5 万行预算 ≤50ms、10 万行 ≤100ms；<20,000 行的浏览器导出（含 1 万行）现行走 main，主线程阻塞约 120ms 量级（见上方 v2.6 路由口径变更注）。Worker 内无论 Workbook 还是 stream，耗时都不阻塞主线程。 另注：`PerformanceObserver` 的 `longtask` 条目以 50ms 为固定阈值，7.3 用它断言「无 longtask」，**无法分辨 16–50ms 区间的主线程占用**。
+> **关于主线程阻塞预算（v2.6 修订）**：浏览器交互导出中 **≥20,000 行**（现行 `WORKER_THRESHOLD`，提交 0c0fbd5 起；v2.0 时为 ≥500 行）在 Worker 线程执行 WASM 工作，主线程只做一次 `postMessage(options)` 结构化克隆。实测结构化克隆开销：1万行 9ms / 5万行 46ms / 10万行 94ms。据此 5 万行预算 ≤50ms、10 万行 ≤100ms；<20,000 行的浏览器导出（含 1 万行）现行走 main，主线程阻塞约 120ms 量级（见上方 v2.6 路由口径变更注）。Worker 内无论 Workbook 还是 stream，耗时都不阻塞主线程。 另注：`PerformanceObserver` 的 `longtask` 条目以 50ms 为固定阈值，7.3 用它断言「无 longtask」，**无法分辨 16–50ms 区间的主线程占用**。
 
 **列数缩放规则（仅 Workbook 路径，auto 路由为 <5 万行即 ≤49,999 行）**：
 
-> ⚠️ **v2.0 修正**：v1.9 称此线性模型"校验误差 < 6%"，实际只测了 1 个数据点（1万行10列 vs 4列），样本量不足以支撑通用结论。toBuffer 在列数维度的增长特性未独立验证。以下线性模型应视为**保守估算**，实际列数 ≥8 时以浏览器环境实测为准（7.3 Playwright 方案为未来计划，当前未实现）。
+> **v2.0 修正**：v1.9 称此线性模型"校验误差 < 6%"，实际只测了 1 个数据点（1万行10列 vs 4列），样本量不足以支撑通用结论。toBuffer 在列数维度的增长特性未独立验证。以下线性模型应视为**保守估算**，实际列数 ≥8 时以浏览器环境实测为准（7.3 Playwright 方案为未来计划，当前未实现）。
 
 > **budget(C 列) ≈ budget(4 列) × (C / 4)**（估算，非保证）
 
@@ -79,7 +79,7 @@
 
 > ¹ **此列是 Workbook 路径（auto 下 ≤49,999 行）的列数缩放预算**，实测基准点为 5 万行（648ms，见下方实测表）。注意 auto 模式下恰好 50000 行已切 stream（`STREAM_THRESHOLD=50_000`，分支 `>=`），Workbook 的 auto 实际适用范围为 ≤49,999 行；此处的"5 万行预算"是 Workbook 路径的性能外推参考，不表示 auto 模式 50000 行走 Workbook。
 
-> ⚠️ **stream 路径（≥5 万行）的列数缩放不适用线性模型**：stream 耗时 = writeRow 循环（JS 层逐行构造 `StreamingCellInput[]`，与列数线性相关）+ `finish()`（WASM ZIP + shared strings 写入，实测 ~90ms，与行列数弱相关）。列数增加主要抬高 writeRow 的 JS 开销。stream 路径的列数预算以浏览器环境实测为准（7.3 Playwright 方案为未来计划，当前未实现）。
+> **stream 路径（≥5 万行）的列数缩放不适用线性模型**：stream 耗时 = writeRow 循环（JS 层逐行构造 `StreamingCellInput[]`，与列数线性相关）+ `finish()`（WASM ZIP + shared strings 写入，实测 ~90ms，与行列数弱相关）。列数增加主要抬高 writeRow 的 JS 开销。stream 路径的列数预算以浏览器环境实测为准（7.3 Playwright 方案为未来计划，当前未实现）。
 
 **实测数据对照（v2.0 二次实测，modern-xlsx@1.2.0，Node v22.22.2，4 列混合类型，独立进程首次，每组 3–6 次取中位）**：
 
@@ -91,13 +91,13 @@
 | 8 万行  | 169 ms      | **7,450 ms**      | 7,648 ms      | ~1,300 ms                                  | **Stream**（Workbook 已塌方）            |
 | 10 万行 | 199 ms      | **17,339 ms**     | 17,541 ms     | **1,548 ms**（writeRow 1,451 + finish 93） | **Stream**                               |
 
-> 📌 **塌方边界的业务含义**：`Workbook.toBuffer()` 的性能塌方起始点在 5.5–6 万行之间（5万 512ms 尚可，6万 1,500ms 开始超线性，8万 7,450ms 已崩）。v2.0 将 stream 的 auto 路由阈值定在 **5 万行**（保守，留 buffer），即 50000 行起一律走 stream（`STREAM_THRESHOLD=50_000`，分支为 `>=`，故恰好 50000 行也走 stream）；<50000 行（≤49,999）用 Workbook（支持完整 StyleBuilder 样式，且更快）。注意：恰好 50000 行时 Workbook 实测 618ms 仍快于 stream 824ms 且未塌方，但 auto 出于保守提前切流——若需在 50000 行用 Workbook 的完整样式，可用 `mode:'main'`（主线程阻塞 ~650ms）或拆分为 ≤49,999 行/文件。
+> **塌方边界的业务含义**：`Workbook.toBuffer()` 的性能塌方起始点在 5.5–6 万行之间（5万 512ms 尚可，6万 1,500ms 开始超线性，8万 7,450ms 已崩）。v2.0 将 stream 的 auto 路由阈值定在 **5 万行**（保守，留 buffer），即 50000 行起一律走 stream（`STREAM_THRESHOLD=50_000`，分支为 `>=`，故恰好 50000 行也走 stream）；<50000 行（≤49,999）用 Workbook（支持完整 StyleBuilder 样式，且更快）。注意：恰好 50000 行时 Workbook 实测 618ms 仍快于 stream 824ms 且未塌方，但 auto 出于保守提前切流——若需在 50000 行用 Workbook 的完整样式，可用 `mode:'main'`（主线程阻塞 ~650ms）或拆分为 ≤49,999 行/文件。
 >
-> 📌 **toBuffer 单步耗时占比**：10 万行场景 toBuffer 占 Workbook 路径总耗时 98.9%（17,339ms / 17,541ms），sheetAddAoa 始终线性（~2.1 µs/行，10万行仅 199ms）。塌方在 WASM 序列化，非数据摄入。
+> **toBuffer 单步耗时占比**：10 万行场景 toBuffer 占 Workbook 路径总耗时 98.9%（17,339ms / 17,541ms），sheetAddAoa 始终线性（~2.1 µs/行，10万行仅 199ms）。塌方在 WASM 序列化，非数据摄入。
 
-> 📌 **官方 benchmark 口径修正**：README「5 万行 49ms / 10 万行 232ms」**只测 `aoaToSheet`，不含 `toBuffer`**，且是热状态数字。不可直接用作端到端验收依据。
+> **官方 benchmark 口径修正**：README「5 万行 49ms / 10 万行 232ms」**只测 `aoaToSheet`，不含 `toBuffer`**，且是热状态数字。不可直接用作端到端验收依据。
 
-> 📌 **5 万行 Workbook 计时口径**：本表「Workbook 总计」5 万行 618ms 为 v2.0 单次分步实测（`sheetAddAoa` 113ms + `toBuffer` 512ms，分步之和 625ms，与端到端 618ms 的 7ms 差为分步/整体计时差）。附录 A 多次取中位 648ms 为正文 1.2/5.3 采用的首次口径基准；618（单次）与 648（中位）差异 ~4%，属独立进程运行波动。
+> **5 万行 Workbook 计时口径**：本表「Workbook 总计」5 万行 618ms 为 v2.0 单次分步实测（`sheetAddAoa` 113ms + `toBuffer` 512ms，分步之和 625ms，与端到端 618ms 的 7ms 差为分步/整体计时差）。附录 A 多次取中位 648ms 为正文 1.2/5.3 采用的首次口径基准；618（单次）与 648（中位）差异 ~4%，属独立进程运行波动。
 
 ### 1.3 范围
 
@@ -129,9 +129,9 @@
 | 产物体积（README 口径）           | ESM 133 KB + IIFE 60 KB + WASM **1.1 MB**（gzip 前）                                                                                                                                                                                                                                                                                                                                                                                            |
 | 实际产物（v2.1 tarball 解包核实） | `dist/index.mjs`(3.6KB re-export) + `dist/utils-Fc_qcAP_.mjs`(263KB 核心逻辑；`import from "../wasm/modern_xlsx_wasm.js"`，`detectWasmUrl()` 引用 `modern-xlsx.wasm`) + `dist/src-B2SjP9PA.mjs`(7.5KB stream/worker) + `dist/modern-xlsx.min.js`(79KB IIFE) + `dist/modern-xlsx.wasm`(**2,000,604 字节 ≈ 1.9MB**，未压缩) + `dist/index-lite.mjs`(7.5KB，只读精简入口，`import from "../wasm-lite/modern_xlsx_wasm.js"`，用**独立的更小 wasm**) |
 
-> 📌 **体积修正**：参考 PDF 称「WASM 1.1MB」，该数字是 README 中给出的**压缩前理论值**；实际 npm 包内 `.wasm` 文件为 **1.9MB**（gzip 后传输体积约 600–700KB，具体取决于服务器压缩）。生产环境务必按 1.9MB 评估 `Content-Length`，按 ~700KB 评估下载耗时。
+> **体积修正**：参考 PDF 称「WASM 1.1MB」，该数字是 README 中给出的**压缩前理论值**；实际 npm 包内 `.wasm` 文件为 **1.9MB**（gzip 后传输体积约 600–700KB，具体取决于服务器压缩）。生产环境务必按 1.9MB 评估 `Content-Length`，按 ~700KB 评估下载耗时。
 
-> ⚠️ **v2.1 wasm 文件名 / wasm-lite 修正（推翻 v2.0 的反向错修，已按实际 tarball 复核）**：v2.0 修订历史称"tarball 内无 `wasm-lite/*` 目录、文件名是 `modern_xlsx_wasm_bg.wasm` 非 `modern-xlsx.wasm`"，两条均与 tarball 不符，v2.1 更正：
+> **v2.1 wasm 文件名 / wasm-lite 修正（推翻 v2.0 的反向错修，已按实际 tarball 复核）**：v2.0 修订历史称"tarball 内无 `wasm-lite/*` 目录、文件名是 `modern_xlsx_wasm_bg.wasm` 非 `modern-xlsx.wasm`"，两条均与 tarball 不符，v2.1 更正：
 >
 > 1. `wasm-lite/` 目录**真实存在**，内含 `modern_xlsx_wasm.js` + `modern_xlsx_wasm_bg.wasm`（1,877,118 B ≈ 1.88MB，独立于主 wasm）。`./lite` 入口 `dist/index-lite.mjs` 即 `import from "../wasm-lite/modern_xlsx_wasm.js"`。v1.9 的"wasm-lite/* 1.88MB"原本正确，v2.0 误删。
 > 2. **两个文件名并存**：`dist/modern-xlsx.wasm`（2,000,604 B，主/lite 入口 `detectWasmUrl()` 引用它）与 `wasm/modern_xlsx_wasm_bg.wasm`（2,000,604 B，wasm-bindgen glue 默认 `new URL("modern_xlsx_wasm_bg.wasm", import.meta.url)`）。`dist/modern-xlsx.worker.js` 内部 glue 用 `modern_xlsx_wasm_bg.wasm`，而 6.2 部署策略与 `configureWasm({ wasmUrl })` 用 `modern-xlsx.wasm`——两者都是有效文件，非"非此即彼"。
@@ -177,7 +177,7 @@
 
 **选型结论**：`modern-xlsx` 在「批量性能 + 免费样式能力」上不可替代，作为核心引擎；`xlsx`（SheetJS CE）作为 WASM 加载失败/不兼容环境的**降级方案**，仅保证「能导出、无样式」。
 
-> 📌 **modern-xlsx 的多入口（已核实 `exports` 字段）**：除主入口 `.`（ESM `dist/index.mjs` + WASM 1.9MB）外，包还导出：
+> **modern-xlsx 的多入口（已核实 `exports` 字段）**：除主入口 `.`（ESM `dist/index.mjs` + WASM 1.9MB）外，包还导出：
 >
 > - `./lite`（`dist/index-lite.mjs`，7.5KB）：精简构建，**只读不支持样式写入**。v2.1 核实（推翻 v2.0）：lite 入口 `import from "../wasm-lite/modern_xlsx_wasm.js"`，用的是**独立的更小 wasm**（`wasm-lite/modern_xlsx_wasm_bg.wasm`，1,877,118 B ≈ 1.88MB），并非复用主 wasm——v1.9 的“wasm-lite/* 1.88MB”原本正确，v2.0 误删。本库需要写样式，故不采用。
 > - `./browser`（`dist/modern-xlsx.min.js`，79KB IIFE）：浏览器全局脚本入口（`unpkg`/`jsdelivr` 指向它），适合无打包器的直引场景；本库走 ESM bundler 链路，不用。
@@ -190,7 +190,7 @@ modern-xlsx 的 `initWasm()` 支持三种加载方式（已核实 `dist/utils-Fc
 ```ts
 // 1. 自动探测（默认）：IIFE 场景 detectWasmUrl() 相对 document.currentScript.src 解析；
 //    ESM 场景 detectWasmUrl() 返回 undefined，由 wasm-bindgen 默认 init() 用 import.meta.url 兜底。
-//    ⚠️ detectWasmUrl() 源码只实现了 document.currentScript 分支（IIFE），
+//    注意：detectWasmUrl() 源码只实现了 document.currentScript 分支（IIFE），
 //    import.meta.url 是 wasm-bindgen 兜底，非显式实现，行为见 4.5 节说明。
 await initWasm();
 
@@ -272,43 +272,55 @@ marcus-monorepo/
   "engines": { "node": ">=22.0.0", "pnpm": ">=9" },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:play": "node scripts/dev.mjs play",
+    "dev:docs": "node scripts/dev.mjs docs",
+    "build:docs": "turbo run build --filter=@marcusok/docs",
+    "preview:docs": "pnpm --filter @marcusok/docs preview",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,vue}\"",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "turbo run lint typecheck test build && changeset publish",
     "prepare": "husky"
   },
   "devDependencies": {
-    "turbo": "^2.3.3",
-    "typescript": "^5.6.3",
-    "tsup": "^8.3.5",
-    "vitest": "^2.1.6",
-    "eslint": "^9.16.0",
-    "typescript-eslint": "^8.18.0",
-    "prettier": "^3.4.2",
-    "husky": "^9.1.7",
-    "lint-staged": "^15.2.10",
+    "@changesets/cli": "^2.27.10",
     "@commitlint/cli": "^19.6.0",
     "@commitlint/config-conventional": "^19.6.0",
-    "@changesets/cli": "^2.27.10",
-    "@types/node": "^22.10.0"
+    "@types/node": "^22.10.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "eslint": "^9.16.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "eslint-plugin-vue": "^10.10.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.4.2",
+    "tsup": "^8.3.5",
+    "turbo": "^2.3.3",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.18.0",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10",
+    "vue-eslint-parser": "^10.4.1",
+    "vue-tsc": "^3.3.9"
   }
 }
 ```
 
-> 📌 **Node 版本说明（v2.1 修正）**：根 `package.json` 的 `engines.node` 设为 **`>=22.0.0`**（与 `.nvmrc` 的 `22`、CI 的 `node-version: 22` 一致）。核心依赖 modern-xlsx@1.2.0 的 `engines.node` 声明为 `>=24.0.0`，但其运行时目标是浏览器、WASM 核心与 Node 版本无关；本仓库在 Node 22（v22.22.2 实测）下 `lint/typecheck/test/build` 全绿（35 个测试全部通过，见 `packages/excel-exporter/src/__tests__/`）。注意：modern-xlsx README 顶部声明 "Requires a runtime with WASM support (Node.js 24+, ...)"，但无专门的 "Node Usage" 章节；Node 22 可用性由本仓库测试套件实测验证，而非 README 声明。为避免 modern-xlsx 的 engines 声明在 Node 22 下 `pnpm install` 报错，`.npmrc` 设 `engine-strict=false`（见 3.5）。CI 与本地开发统一用 Node 22（`.nvmrc` 锁定）。
+> **Node 版本说明（v2.1 修正）**：根 `package.json` 的 `engines.node` 设为 **`>=22.0.0`**（与 `.nvmrc` 的 `22`、CI 的 `node-version: 22` 一致）。核心依赖 modern-xlsx@1.2.0 的 `engines.node` 声明为 `>=24.0.0`，但其运行时目标是浏览器、WASM 核心与 Node 版本无关；本仓库在 Node 22（v22.22.2 实测）下 `lint/typecheck/test/build` 全绿（35 个测试全部通过，见 `packages/excel-exporter/src/__tests__/`）。注意：modern-xlsx README 顶部声明 "Requires a runtime with WASM support (Node.js 24+, ...)"，但无专门的 "Node Usage" 章节；Node 22 可用性由本仓库测试套件实测验证，而非 README 声明。为避免 modern-xlsx 的 engines 声明在 Node 22 下 `pnpm install` 报错，`.npmrc` 设 `engine-strict=false`（见 3.5）。CI 与本地开发统一用 Node 22（`.nvmrc` 锁定）。
 
-> 📌 **`@types/node` 落在根 devDependencies**：本 monorepo 所有包共享 TS 基线（`tsconfig.base.json` 含 `DOM`+`WebWorker`），`@types/node`（`^22.10.0`，与 engines 对齐）在根声明一次即可被子包通过 workspace 符号链接继承，子包 `excel-exporter/package.json` 不重复声明。v2.0 曾把 `@playwright/test` 列入根 devDependencies，但本仓库当前**不包含浏览器集成测试**（7.3 的 Playwright 方案为未实现的未来计划），v2.1 已将其移除。
+> **`@types/node` 落在根 devDependencies**：本 monorepo 所有包共享 TS 基线（`tsconfig.base.json` 含 `DOM`+`WebWorker`），`@types/node`（`^22.10.0`，与 engines 对齐）在根声明一次即可被子包通过 workspace 符号链接继承，子包 `excel-exporter/package.json` 不重复声明。v2.0 曾把 `@playwright/test` 列入根 devDependencies，但本仓库当前**不包含浏览器集成测试**（7.3 的 Playwright 方案为未实现的未来计划），v2.1 已将其移除。
 
 ### 3.4 `pnpm-workspace.yaml`
 
 ```yaml
 packages:
   - "packages/*"
+  - "apps/*"
 ```
 
 ### 3.5 `.npmrc`
@@ -328,13 +340,14 @@ engine-strict=false
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["tsconfig.base.json"],
-  "globalEnv": ["NODE_ENV", "CI", "PERF_TIGHT", "RUN_PERF"],
+  "globalEnv": ["NODE_ENV", "CI", "PERF_TIGHT", "RUN_PERF", "DOCS_BASE"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
     "dev": {
+      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
     },
@@ -342,18 +355,20 @@ engine-strict=false
       "outputs": []
     },
     "lint": {
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "typecheck": {
+      "dependsOn": ["^build"],
       "outputs": []
     }
   }
 }
 ```
 
-> `build.dependsOn: ["^build"]` 表示「先构建依赖的内部包，再构建当前包」。`excel-exporter` 不依赖其他内部包，但保留此约定以便未来 `pdf-exporter` 依赖 `excel-exporter` 时自动排序。
+> `build.dependsOn: ["^build"]` 表示「先构建依赖的内部包，再构建当前包」。`excel-exporter` 不依赖其他内部包，但保留此约定以便未来 `pdf-exporter` 依赖 `excel-exporter` 时自动排序（`apps/docs` 已实际依赖 `excel-exporter` 的构建产物，`^build` 编排生效）。
 >
-> 📌 **`globalEnv` 含 `PERF_TIGHT` / `RUN_PERF`（v2.1 对齐实际）**：这两个环境变量控制 `performance.test.ts`（7.2）——`PERF_TIGHT=1` 把容差从默认 1.5x 收紧到 1.0x；`RUN_PERF=0` 跳过性能用例（CI 设此值，本地默认跑）。`test` 任务不设 `dependsOn`（基准直接跑源码）、`outputs: []`。v2.0 曾设 `test:browser` 任务，本仓库当前无浏览器测试，v2.1 已删除。
+> **`globalEnv` 含 `PERF_TIGHT` / `RUN_PERF`**：`RUN_PERF=0` 跳过性能用例（CI 设此值，本地默认跑）。`PERF_TIGHT=1` 曾把容差从默认 1.5x 收紧到 1.0x，该机制现已移除——现行 `performance.test.ts` 的 `SLACK` 恒为 1.0（见 7.2），turbo.json 里的 `PERF_TIGHT` 声明属残留。`test` 任务不设 `dependsOn`（基准直接跑源码）、`outputs: []`；`lint`/`typecheck`/`dev` 现也声明了 `dependsOn: ["^build"]`。v2.0 曾设 `test:browser` 任务，本仓库当前无浏览器测试，v2.1 已删除。
 
 ### 3.7 根 `tsconfig.base.json`
 
@@ -558,6 +573,9 @@ jobs:
       contents: write
       pull-requests: write
       id-token: write
+    env:
+      HUSKY: "0"
+      RUN_PERF: "0"
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -578,16 +596,24 @@ jobs:
           commit: "chore: release packages"
           title: "chore: release packages"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT so the Version PR triggers ci.yml. The default GITHUB_TOKEN is
+          # exempt from GitHub's anti-recursion rule (it cannot trigger other
+          # workflows). Create a fine-grained PAT (contents:write,
+          # pull-requests:write) and store it as repo secret
+          # CHANGESETS_GITHUB_TOKEN. Falls back to GITHUB_TOKEN if unset.
+          GITHUB_TOKEN: ${{ secrets.CHANGESETS_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
+          # setup-node's registry-url writes ~/.npmrc reading this var; this is
+          # the token `changesets publish` -> `npm publish` actually picks up.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 ```
 
 **发布语义**：合并 PR 触发 `changesets/action`：若存在未消费的 changeset，它会**先开一个「Version Packages」PR**（自动改版本号+changelog）；当该 PR 被合并且无新 changeset 时，才真正执行 `pnpm release`（build + publish）。这避免了误发版。
 
-> 📌 **npm Scope 确权**：包名 `@marcusok/excel-exporter` 依赖 `@marcus` 组织或用户 `marcus` 存在。Phase 1 预研阶段应运行 `npm view @marcusok/excel-exporter` 确认可用性；若需创建组织：`npm org create marcus --defaults`。`publishConfig` 在 4.2 `package.json` 中已配置 `access: "public"`。
+> **npm Scope 确权**：包名 `@marcusok/excel-exporter` 依赖 `@marcusok` 组织或用户 `marcusok` 存在（发布前应运行 `npm view @marcusok/excel-exporter` 确认可用性；若需创建组织：`npm org create marcusok --defaults`）。`publishConfig` 在 4.2 `package.json` 中已配置 `access: "public"`。
 
-> 📌 **CI 不含浏览器测试（v2.1 对齐实际）**：本仓库当前**不包含 Playwright / 浏览器端到端测试**——根 `package.json` 无 `@playwright/test`、无 `test:browser` 任务、CI 无 `playwright install`。7.3 的 Playwright worker/longtask 验收方案是**未实现的未来计划**（见 7.3）。当前回归守卫是 Vitest 的 `performance.test.ts`（7.2），通过 `RUN_PERF` 门控：CI 设 `RUN_PERF=0` 跳过性能用例（共享 runner 抖动大），本地 `pnpm test` 默认跑。
+> **CI 不含浏览器测试（v2.1 对齐实际）**：本仓库当前**不包含 Playwright / 浏览器端到端测试**——根 `package.json` 无 `@playwright/test`、无 `test:browser` 任务、CI 无 `playwright install`。7.3 的 Playwright worker/longtask 验收方案是**未实现的未来计划**（见 7.3）。当前回归守卫是 Vitest 的 `performance.test.ts`（7.2），通过 `RUN_PERF` 门控：CI 设 `RUN_PERF=0` 跳过性能用例（共享 runner 抖动大），本地 `pnpm test` 默认跑。
 
 ---
 
@@ -637,7 +663,7 @@ packages/excel-exporter/
 ```json
 {
   "name": "@marcusok/excel-exporter",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "type": "module",
   "description": "High-performance Excel export engine built on modern-xlsx (Rust + WASM).",
   "license": "MIT",
@@ -708,7 +734,7 @@ packages/excel-exporter/
 }
 ```
 
-> 📌 **v2.6 快照注**：`dependencies` 里的 `fflate` 是 v2.5 fast-xlsx 路径引入的**运行时依赖**（此前本包零运行时依赖）；`"./package.json"` 子路径导出供文档站等消费方在运行时读取版本号（0.3.0 起）。
+> **v2.6 快照注**：`dependencies` 里的 `fflate` 是 v2.5 fast-xlsx 路径引入的**运行时依赖**（此前本包零运行时依赖）；`"./package.json"` 子路径导出供文档站等消费方在运行时读取版本号（0.3.0 起）。
 
 **设计要点**：
 
@@ -765,15 +791,15 @@ export default defineConfig([
 ]);
 ```
 
-> 📌 **为何 Worker 入口必须自包含（已核实）**：浏览器中 `new Worker(url, {type:'module'})` 加载的 module worker 走独立的 module script 解析，**不共享主文档的 import map**（WHATWG HTML spec：import map 仅注册在 Document 上下文，WorkerGlobalScope 无对应注册机制；Chrome/Firefox/Safari 实现一致）。因此 worker 脚本里的 `import ... from 'modern-xlsx'` 这种 bare specifier 会直接抛 `TypeError: Failed to resolve module specifier`，**运行时必崩**。**旁证**：modern-xlsx 官方的 `modern-xlsx.worker.js`（wasm-bindgen 输出，已核实源码）本身就是自包含的，不 import 任何 npm 包——这恰恰是 worker 不能依赖 bare import 的实证。本方案因此把 modern-xlsx 打包进 `export.worker.js`（约 +133KB 压缩前），换取 worker 独立可加载。代价：worker 体积增大，但仅按需加载（worker 模式才触发），且浏览器只下载一次。
+> **为何 Worker 入口必须自包含（已核实）**：浏览器中 `new Worker(url, {type:'module'})` 加载的 module worker 走独立的 module script 解析，**不共享主文档的 import map**（WHATWG HTML spec：import map 仅注册在 Document 上下文，WorkerGlobalScope 无对应注册机制；Chrome/Firefox/Safari 实现一致）。因此 worker 脚本里的 `import ... from 'modern-xlsx'` 这种 bare specifier 会直接抛 `TypeError: Failed to resolve module specifier`，**运行时必崩**。**旁证**：modern-xlsx 官方的 `modern-xlsx.worker.js`（wasm-bindgen 输出，已核实源码）本身就是自包含的，不 import 任何 npm 包——这恰恰是 worker 不能依赖 bare import 的实证。本方案因此把 modern-xlsx 打包进 `export.worker.js`（约 +133KB 压缩前），换取 worker 独立可加载。代价：worker 体积增大，但仅按需加载（worker 模式才触发），且浏览器只下载一次。
 >
-> 📌 **为何主入口只产 ESM**：modern-xlsx 的 `exports['.']` 只有 `import`/`default`，**无 require 分段**（已核实 npm tarball `package.json`）。若本库产 CJS，消费方 `require('@marcusok/excel-exporter')` 会触发 `require('modern-xlsx')` 抛 Node `ERR_REQUIRE_ESM`。本库定位为浏览器导出引擎，消费方均为现代 ESM 工程（Vite/Rollup/webpack5），ESM-only 最干净，也与 modern-xlsx 的 `"type":"module"` 对齐。`package.json` 因此不设 `main`/`require`（见 4.2）。
+> **为何主入口只产 ESM**：modern-xlsx 的 `exports['.']` 只有 `import`/`default`，**无 require 分段**（已核实 npm tarball `package.json`）。若本库产 CJS，消费方 `require('@marcusok/excel-exporter')` 会触发 `require('modern-xlsx')` 抛 Node `ERR_REQUIRE_ESM`。本库定位为浏览器导出引擎，消费方均为现代 ESM 工程（Vite/Rollup/webpack5），ESM-only 最干净，也与 modern-xlsx 的 `"type":"module"` 对齐。`package.json` 因此不设 `main`/`require`（见 4.2）。
 >
-> 📌 **`clean` 字段**：数组 config 中只有第一个设 `clean:true`，第二个设 `clean:false`。tsup 按数组顺序串行执行——第一个清空 `dist` 后产出主入口，第二个追加 worker 产物不清空。若两个都设 `clean:true`，第二个会清掉第一个的产物。
+> **`clean` 字段**：数组 config 中只有第一个设 `clean:true`，第二个设 `clean:false`。tsup 按数组顺序串行执行——第一个清空 `dist` 后产出主入口，第二个追加 worker 产物不清空。若两个都设 `clean:true`，第二个会清掉第一个的产物。
 >
-> 📌 **构建命令**：因采用 tsup 数组 config（per-entry external 差异化），`build` 脚本只需 `"build": "tsup"`（tsup 自动处理数组 config）。最终产物 `dist/export.worker.js`（ESM，自包含 modern-xlsx）包含在 `files` 字段内，随包发布。
+> **构建命令**：因采用 tsup 数组 config（per-entry external 差异化），`build` 脚本只需 `"build": "tsup"`（tsup 自动处理数组 config）。最终产物 `dist/export.worker.js`（ESM，自包含 modern-xlsx）包含在 `files` 字段内，随包发布。
 >
-> ⚠️ **S5 · Worker 自包含打包的 go/no-go 关卡**：上述「modern-xlsx 打进 worker」的技术路径已做最小验证——esbuild/tsup 打包时，modern-xlsx glue（`dist/modern-xlsx.worker.js` 源码核实）里的 `new URL("modern_xlsx_wasm_bg.wasm", import.meta.url)` 会被**原样保留**（v2.1 核实：worker.js glue 内确实是 `modern_xlsx_wasm_bg.wasm`；但 `dist/modern-xlsx.wasm` 也存在且是主入口 `detectWasmUrl()` 引用的文件，二者并存，见 2.1；实测 esbuild 不报错、不重写、不触发 asset 拷贝，因为 `.wasm` 不在 import graph 里）。运行时 worker 内 `import.meta.url` 指向 `export.worker.js`，本方案靠显式 `initWasm(wasmUrl)` 注入绕过该路径（见 4.9），故不依赖 `import.meta.url` 兜底。**但必须真机验证**：Phase 1 预研阶段需确认 ① tsup 产物 `export.worker.js` 体积合理（预期 modern-xlsx ESM ~133KB + 本库 worker 逻辑）；② `new Worker(url,{type:'module'})` 在 Chrome/Firefox/Safari 均能加载；③ worker 内 `initWasm(wasmUrl)` + `sheetAddAoa` + `wb.toBuffer()` 全链路跑通。若打包阶段报错（如 esbuild 对 wasm-bindgen glue 的 `__wbg_init` 处理异常），备选方案：worker 也 `external: ['modern-xlsx']`，改用运行时 `import(/* @vite-ignore */ url)` 动态加载或 import map（需消费方配合）。
+> **S5 · Worker 自包含打包的 go/no-go 关卡**：上述「modern-xlsx 打进 worker」的技术路径已做最小验证——esbuild/tsup 打包时，modern-xlsx glue（`dist/modern-xlsx.worker.js` 源码核实）里的 `new URL("modern_xlsx_wasm_bg.wasm", import.meta.url)` 会被**原样保留**（v2.1 核实：worker.js glue 内确实是 `modern_xlsx_wasm_bg.wasm`；但 `dist/modern-xlsx.wasm` 也存在且是主入口 `detectWasmUrl()` 引用的文件，二者并存，见 2.1；实测 esbuild 不报错、不重写、不触发 asset 拷贝，因为 `.wasm` 不在 import graph 里）。运行时 worker 内 `import.meta.url` 指向 `export.worker.js`，本方案靠显式 `initWasm(wasmUrl)` 注入绕过该路径（见 4.9），故不依赖 `import.meta.url` 兜底。**但必须真机验证**：Phase 1 预研阶段需确认 ① tsup 产物 `export.worker.js` 体积合理（预期 modern-xlsx ESM ~133KB + 本库 worker 逻辑）；② `new Worker(url,{type:'module'})` 在 Chrome/Firefox/Safari 均能加载；③ worker 内 `initWasm(wasmUrl)` + `sheetAddAoa` + `wb.toBuffer()` 全链路跑通。若打包阶段报错（如 esbuild 对 wasm-bindgen glue 的 `__wbg_init` 处理异常），备选方案：worker 也 `external: ['modern-xlsx']`，改用运行时 `import(/* @vite-ignore */ url)` 动态加载或 import map（需消费方配合）。
 
 ### 4.4 类型定义 + 格式化工具（`types.ts` + `format-utils.ts`）
 
@@ -1238,7 +1264,7 @@ return defaultLoader;
   defaultLoader.updateOptions(opts);
   }
 
-> 📌 **为什么不用 modern-xlsx 官方的 `ensureReady()`？**（已核实源码）官方提供 `ensureReady(wasmSource?)`，内部即「若未初始化则调 `initWasm`」，等价于「首次使用自动初始化」。本库**没有**直接用它的原因：
+> **为什么不用 modern-xlsx 官方的 `ensureReady()`？**（已核实源码）官方提供 `ensureReady(wasmSource?)`，内部即「若未初始化则调 `initWasm`」，等价于「首次使用自动初始化」。本库**没有**直接用它的原因：
 >
 > - 官方 `ensureReady` / `initWasm` **不带超时、不带重试**（源码：`initPromise ??= init(source ?? detectWasmUrl()).then(...)`，失败即 throw，不重试）。本库的 `WasmLoader` 额外提供 `timeoutMs`（默认 10s）+ `maxRetries`（默认 3，指数退避），应对 CDN/网络抖动，失败后再触发降级链路（见 5.4）。
 > - 官方 `detectWasmUrl()` 只覆盖浏览器 `<script>` 场景（源码：仅 `document.currentScript` 分支），Node 下返回 `undefined`，靠 wasm-bindgen 默认 `init` 兜底；本库通过 `configureWasm({ wasmUrl })` 让生产环境显式指定自托管 URL，行为可预期。
@@ -1452,7 +1478,7 @@ function withAutoNumFormat(c: ColumnConfig): ColumnConfig {
 > - `ws.cell(ref)` 接收 **A1 字符串**（如 `'A1'`），而非数字坐标。
 > - `sheetAddAoa(ws, aoa, { origin })` 是批量写入的正解（参考 PDF 中的 `ws.batch().writeRows()` 不存在）。
 >
-> 📌 **整列数据样式已实现**（步骤 4b）：`sheetAddAoa` 批量写入后，遍历 `ws.rows` 直接改 `CellData.styleIndex`——纯 JS 属性赋值（O(N)，N = 行数），不经过 WASM 边界、不做 ref 解析。与 `ws.cell(ref).styleIndex = idx`（每次都要 A1 ref 解析 + 行/单元格查找）相比，跳过了热路径上最大的常数因子。5 万行单列赋值预计 < 10ms（以 `performance.test.ts` 实测为准）。如需多列样式，在外层 `forEach` 内对每列各调一次 `buildStyleIndex`（`StyleBuilder` 会去重合并到同一 `cellXfs` 表，不会重复注册）。
+> **整列数据样式已实现**（步骤 4b）：`sheetAddAoa` 批量写入后，遍历 `ws.rows` 直接改 `CellData.styleIndex`——纯 JS 属性赋值（O(N)，N = 行数），不经过 WASM 边界、不做 ref 解析。与 `ws.cell(ref).styleIndex = idx`（每次都要 A1 ref 解析 + 行/单元格查找）相比，跳过了热路径上最大的常数因子。5 万行单列赋值预计 < 10ms（以 `performance.test.ts` 实测为准）。如需多列样式，在外层 `forEach` 内对每列各调一次 `buildStyleIndex`（`StyleBuilder` 会去重合并到同一 `cellXfs` 表，不会重复注册）。
 
 ### 4.8 流式构建器（`streaming-builder.ts` + `fast-xlsx.ts`）— 大数据主路径（v1.9 重构；v2.5 起切换 fast-xlsx）
 
@@ -1861,17 +1887,17 @@ export async function exportAsStreamBlob(
 }
 ```
 
-> ⚠️ **stream 的样式边界（v1.9 明确）**：`StreamingCellInput` 有 `style?: number`（styleIndex）字段，但设置样式需要先用 `writer.setStylesXml(xml)` 注入完整 `xl/styles.xml`（OOXML 字符串）。类型定义核实：`setStylesXml` 必须在 `startSheet` 之前调用，缺省时用最小默认样式表（1 font / 2 fills / 1 border / 1 cellXf）。
+> **stream 的样式边界（v1.9 明确）**：`StreamingCellInput` 有 `style?: number`（styleIndex）字段，但设置样式需要先用 `writer.setStylesXml(xml)` 注入完整 `xl/styles.xml`（OOXML 字符串）。类型定义核实：`setStylesXml` 必须在 `startSheet` 之前调用，缺省时用最小默认样式表（1 font / 2 fills / 1 border / 1 cellXf）。
 >
 > **v1.9 取舍**：stream 路径 **v1 只支持纯数据 + 表头样式（通过 setStylesXml 预注册有限样式）**，不支持 StyleBuilder 链式样式。原因：完整 styles.xml 的拼接逻辑较繁琐（按 OOXML 规范组装 fonts/fills/borders/cellXfs，约 80-120 行），列入 **Phase 2 高级特性**。需要完整样式的大数据导出（≥5万行+复杂样式）在 Phase 1 暂不支持，业务侧需：① 拆分为 <5 万行（≤49,999）/文件走 Workbook；② 或接受纯数据；③ 或等 Phase 2 的 `buildStylesXmlForStream()` 工具函数。
 >
 > **这与 v1.8 的差异**：v1.8 错误地认为"带样式必须走 Workbook（即使 ≥10 万行）"，导致撞上 toBuffer 塌方。v1.9 修正为：≥5 万行优先保性能（stream，纯数据或有限样式），样式完整性让位于"能在合理时间内导出"。
 
-> 📌 **round-trip 正确性已验证**：stream 产出的 xlsx 经 `readBuffer` 读回，行数、表头、首末数据单元格全部一致（1000 行 / 50000 行两组用例 PASS）。stream 路径数据完整性可信。
+> **round-trip 正确性已验证**：stream 产出的 xlsx 经 `readBuffer` 读回，行数、表头、首末数据单元格全部一致（1000 行 / 50000 行两组用例 PASS）。stream 路径数据完整性可信。
 
-> 📌 **stream 必须在 Worker 内执行**：`finish()` 实测 ~90ms（v2.0 修正，v1.9 误记为 3ms），10 万行的 `writeRow` 循环（JS 层逐行构造 `StreamingCellInput[]`）约 1.45s，放主线程会阻塞。pickMode 对 ≥500 行一律丢进 Worker，stream 也不例外（见 4.9/4.10）。（v2.6 注：本条写于 `WORKER_THRESHOLD=500` 时代；现行阈值为 20,000，浏览器 ≥20,000 行进 Worker，Node 的 stream 在主线程执行——fast-xlsx 100k 约 0.8s，产品接受。）
+> **stream 必须在 Worker 内执行**：`finish()` 实测 ~90ms（v2.0 修正，v1.9 误记为 3ms），10 万行的 `writeRow` 循环（JS 层逐行构造 `StreamingCellInput[]`）约 1.45s，放主线程会阻塞。pickMode 对 ≥500 行一律丢进 Worker，stream 也不例外（见 4.9/4.10）。（v2.6 注：本条写于 `WORKER_THRESHOLD=500` 时代；现行阈值为 20,000，浏览器 ≥20,000 行进 Worker，Node 的 stream 在主线程执行——fast-xlsx 100k 约 0.8s，产品接受。）
 
-> 📌 **跨阈值的值语义差异（≤49,999 行 Workbook vs ≥50,000 行 stream）**：同一 `FormatSpec` 在两条路径产出的**单元格内部值不同**——`number` 在 Workbook 路径（`applyFormat`，见 4.7）保留全精度、靠 auto 注入的 `numFormat` 显示小数；在 stream 路径（`displayValue`，见 4.8）用 `Number(n.toFixed(decimals ?? 0))` 把小数**直接烤进值**（精度有损）。⚠️ **`decimals` 未指定时默认 0（最常踩的坑）**：`{type:'number'}`（不带 `decimals`）在 Workbook 路径仍存全精度（如 `9999.99`），但在 stream 路径会被 `toFixed(0)` **四舍五入到整数**（实测 `9999.99 → 10000`）——即 ≥5 万行导出时小数被静默丢弃。大数据 number 列务必显式写 `decimals`，否则跨阈值会出现精度不一致。`date`/`datetime` 在 Workbook 存日期序列（数字），在 stream 存格式化字符串。若同一列数据量跨阈值（如分批导出 4 万 vs 6 万行），下游按单元格类型/精度处理会观察到差异。源码见 `format-utils.ts` 的 `applyFormat` vs `displayValue`。
+> **跨阈值的值语义差异（≤49,999 行 Workbook vs ≥50,000 行 stream）**：同一 `FormatSpec` 在两条路径产出的**单元格内部值不同**——`number` 在 Workbook 路径（`applyFormat`，见 4.7）保留全精度、靠 auto 注入的 `numFormat` 显示小数；在 stream 路径（`displayValue`，见 4.8）用 `Number(n.toFixed(decimals ?? 0))` 把小数**直接烤进值**（精度有损）。**`decimals` 未指定时默认 0（最常踩的坑）**：`{type:'number'}`（不带 `decimals`）在 Workbook 路径仍存全精度（如 `9999.99`），但在 stream 路径会被 `toFixed(0)` **四舍五入到整数**（实测 `9999.99 → 10000`）——即 ≥5 万行导出时小数被静默丢弃。大数据 number 列务必显式写 `decimals`，否则跨阈值会出现精度不一致。`date`/`datetime` 在 Workbook 存日期序列（数字），在 stream 存格式化字符串。若同一列数据量跨阈值（如分批导出 4 万 vs 6 万行），下游按单元格类型/精度处理会观察到差异。源码见 `format-utils.ts` 的 `applyFormat` vs `displayValue`。
 
 ### 4.9 Worker 模式（`worker-exporter.ts` + `src/workers/export.worker.ts`）— v1.9 重构
 
@@ -2168,7 +2194,7 @@ export function terminateWorker(): void {
 > 3. **worker 入口**：`worker-exporter.ts` 在 `postMessage` 前对 options 做一次"剥函数"预处理——把 format 中的函数过滤掉（置 undefined 并打 warning），只保留 FormatSpec。这样 worker 模式只接受 FormatSpec，函数形式的 format 只在 main/stream（Node）模式有效。
 > 4. **执行位置**：main 模式 format 在主线程执行；worker 模式 format（FormatSpec 形式）在 Worker 线程执行（随 options 结构化克隆进 Worker，由 resolveCellFormat 解释）。
 
-> 📌 **关键设计点（保留 v1.8 正确部分）**：
+> **关键设计点（保留 v1.8 正确部分）**：
 >
 > - Worker 内的构建逻辑与主线程 `WorkbookBuilder`/`exportAsStream` 完全等价，无重复实现。
 > - `wb.toBuffer()` / `writer.finish()` 在 Worker 线程执行，主线程零阻塞。
@@ -2397,7 +2423,7 @@ export async function exportEcharts(
 
 > 🔄 **v2.6 快照说明**：以上已整体替换为 `src/index.ts` 现行源码（提交 0c0fbd5 调整 `WORKER_THRESHOLD` 500 → 20_000 起）。与 v2.4 及以前快照的差异：① `WORKER_THRESHOLD = 20_000`——浏览器 auto 1 万行现走 **main**（不再是 worker）；② WASM 能力检测改为 `needsWasm = workerMode !== "stream"`——**Fast stream 路径不需要 WASM**，不支持 WebAssembly 的浏览器 ≥5 万行仍可正常导出（engine 为 `modern-xlsx`），不再一律降级 SheetJS；③ 新增 `onPhase` 阶段打点（`init`/`build`/`download`，Node 下不报 `download`）与 build 失败也上报的 `finally` 语义；④ 新增 `exportTable` / `exportEcharts` 便捷适配器。
 
-> 📌 **v1.9 pickMode 与 v1.8 的关键差异**：
+> **v1.9 pickMode 与 v1.8 的关键差异**：
 >
 > - **stream 阈值 10万 → 5万**：v1.8 认为 toBuffer 在 10 万行"热状态"744ms，把 stream 留到 10 万；v1.9 实测发现 8 万行首次塌方到 8 秒，5 万行（648ms）是 Workbook 路径的保守安全上限。
 > - **stream 不再要求"无列样式"**：v1.8 把 stream 限制为纯数据（因为觉得带样式必须走 Workbook）；v1.9 修正为——性能优先，≥5 万行一律 stream（样式用 setStylesXml 有限支持，Phase 2 增强）。带复杂样式的大数据是已知取舍，非 bug。
@@ -2463,7 +2489,7 @@ export type StylePresetName = keyof typeof StylePresets;
 
 WASM 加载失败或不支持时，降级到 SheetJS 导出。**v1.8 修正（P4）**：npm 上的 `xlsx` 包停在 `0.18.5`（2022-01-26 发布，已 4 年未更新），官方早已停止向 npm 发版。降级应改用 SheetJS 官方 CDN 的最新版 `0.20.3`（实测 `https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs` 可访问）。
 
-> ⚠️ **降级策略取舍**：SheetJS CE 无论哪个版本**写样式均需 Pro 授权**（已核实），降级路径必然丢样式。因此降级仅作为"WASM 不可用时的最后保底"，**不应作为常规路径**。生产环境优先确保 WASM 自托管 + 重试链路稳定（见 4.5），降级率应监控并趋近于 0。
+> **降级策略取舍**：SheetJS CE 无论哪个版本**写样式均需 Pro 授权**（已核实），降级路径必然丢样式。因此降级仅作为"WASM 不可用时的最后保底"，**不应作为常规路径**。生产环境优先确保 WASM 自托管 + 重试链路稳定（见 4.5），降级率应监控并趋近于 0。
 
 ```ts
 import type { ExportOptions, ExportResult } from "./types";
@@ -2556,7 +2582,7 @@ export async function exportWithSheetJS(
 }
 ```
 
-> 📌 **P4 修正要点**：
+> **P4 修正要点**：
 >
 > - **npm `xlsx@0.18.5` 已过期**：发布于 2022-01-26，npm `latest` tag 一直停在此版本，官方不再向 npm 推送更新（已核实 `npm view xlsx`）。SheetJS 官方迁移到自建 CDN `cdn.sheetjs.com`，最新版 `0.20.3`（实测 HTTP 200）。
 > - **降级加载优先级**：① 消费方显式安装的 `xlsx`（workspace 内的现代版）；② 官方 CDN `0.20.3`。不再使用 npm 的 `0.18.5`。
@@ -2615,7 +2641,7 @@ export function toBlobPart(bytes: Uint8Array): BlobPart {
 
 所有数据写入走 `aoaToSheet` / `sheetAddAoa` / `StreamingXlsxWriter.writeRow`（API 简洁，错误处理集中）。
 
-> ⚠️ **v1.8 修正（源码核实，纠正"批量比逐格快 8x"的误述）**：早期版本称"批量比逐格快 8x+，禁止逐格"。**源码核实推翻此论证**——`sheetAddAoa` 内部实现就是逐格调用 `ws.cell(ref)`：
+> **v1.8 修正（源码核实，纠正"批量比逐格快 8x"的误述）**：早期版本称"批量比逐格快 8x+，禁止逐格"。**源码核实推翻此论证**——`sheetAddAoa` 内部实现就是逐格调用 `ws.cell(ref)`：
 >
 > ```js
 > // modern-xlsx@1.2.0 dist/utils-Fc_qcAP_.mjs 源码（已核实）
@@ -2660,7 +2686,7 @@ if ("requestIdleCallback" in window) {
 }
 ```
 
-> 📌 **主线程预热与 Worker 的并发初始化权衡**：上面的 `requestIdleCallback` 预热只在**主线程**初始化 WASM。当首次大导出触发 Worker 模式时，Worker 线程会**独立**再走一次 `initWasm(wasmUrl)`（Web Worker 有独立全局，见 4.9 澄清）。后果：
+> **主线程预热与 Worker 的并发初始化权衡**：上面的 `requestIdleCallback` 预热只在**主线程**初始化 WASM。当首次大导出触发 Worker 模式时，Worker 线程会**独立**再走一次 `initWasm(wasmUrl)`（Web Worker 有独立全局，见 4.9 澄清）。后果：
 >
 > - WASM **二进制只下载一次**（浏览器 HTTP 缓存，~700KB gzip）；
 > - 但 WASM **编译/实例化各算一份**（主线程一份 + Worker 一份），双倍吃 CPU 与内存（每份约 1.9MB 解压后实例）。
@@ -2675,9 +2701,9 @@ if ("requestIdleCallback" in window) {
 
 ### 5.3 模式自动调度（v2.0 重写，对齐 4.10 pickMode；v2.6 阈值对齐）
 
-> ⚠️ **v2.0 修正**：v1.9 的 5.3 是 v1.8 残留——用 10 万行阈值 + "结构化克隆入向"（v1.9 已删除 flat-encoder，称其为"硬伤 3"），与 4.10 pickMode（5 万行阈值 + 结构化克隆）直接冲突。照 5.3 实现会 reintroduce 已确认的数据损坏缺陷。v2.0 重写本表，与 4.10 完全一致。
+> **v2.0 修正**：v1.9 的 5.3 是 v1.8 残留——用 10 万行阈值 + "结构化克隆入向"（v1.9 已删除 flat-encoder，称其为"硬伤 3"），与 4.10 pickMode（5 万行阈值 + 结构化克隆）直接冲突。照 5.3 实现会 reintroduce 已确认的数据损坏缺陷。v2.0 重写本表，与 4.10 完全一致。
 >
-> ⚠️ **v2.6 修正**：Worker 阈值随源码更新为 20,000（提交 0c0fbd5），下表已按现行 `pickMode` 修正浏览器 <20,000 / 20,000–49,999 的分档；v2.0 原表分档为 500。
+> **v2.6 修正**：Worker 阈值随源码更新为 20,000（提交 0c0fbd5），下表已按现行 `pickMode` 修正浏览器 <20,000 / 20,000–49,999 的分档；v2.0 原表分档为 500。
 
 | 数据量             | 运行环境     | auto 模式路由 | workerMode | 理由（v2.0 二次实测；v2.6 阈值）                                                                                                                                                                           |
 | ------------------ | ------------ | ------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2687,11 +2713,11 @@ if ("requestIdleCallback" in window) {
 | ≥ 50,000 行        | **浏览器**   | **worker**    | **stream** | Workbook 路径 toBuffer 在 ≥5.5万行开始超线性塌方（6万 1.6s / 8万 7.6s / 10万 17.5s）。Fast stream（fast-xlsx）全流程 10万行实测 ~762ms 达标（<1000ms）。stream v1 不支持样式，需样式的大数据拆分或接受降级 |
 | ≥ 50,000 行        | **Node/SSR** | **stream**    | stream     | 同上，Node 直接主线程跑 stream（fast-xlsx 不依赖 Worker 与 WASM）                                                                                                                                          |
 
-> 📌 **stream 阈值从 10 万降到 5 万**（v1.9 确立，v2.0 确认）：toBuffer 塌方起始点在 5.5–6 万行（实测 6万 1.6s 已超线性）。5 万是 Workbook 路径的保守安全上限（实测 ~648ms）。≥5 万行一律走 stream，彻底避开塌方边界的不确定性。
+> **stream 阈值从 10 万降到 5 万**（v1.9 确立，v2.0 确认）：toBuffer 塌方起始点在 5.5–6 万行（实测 6万 1.6s 已超线性）。5 万是 Workbook 路径的保守安全上限（实测 ~648ms）。≥5 万行一律走 stream，避开塌方边界的不确定性。
 >
-> 📌 **stream 的样式限制（已知取舍；v2.6 注）**：现行 fast-xlsx 完全不产出样式（连 `style`/`headerStyle` 数据列样式也 warn 后丢弃）；v2.0 时代的 `StreamingXlsxWriter` 也只接受 `StreamingCellInput.style` 数字索引（需配合 `setStylesXml`）。v1 的 stream 路径只支持纯数据，且 `width`/`freezeRows`/`autoFilter`/`merges` 等 `SheetConfig` 布局字段在 stream 模式下仅 `console.warn` 后丢弃（见 4.8 现行源码的 skipped 清单）。需要完整样式的大数据导出（≥5万行）在 Phase 1 暂不支持，业务侧需：① 拆分为 <5 万行（≤49,999）/文件走 Workbook；② 或接受纯数据。这是工程取舍，非 bug。
+> **stream 的样式限制（已知取舍；v2.6 注）**：现行 fast-xlsx 完全不产出样式（连 `style`/`headerStyle` 数据列样式也 warn 后丢弃）；v2.0 时代的 `StreamingXlsxWriter` 也只接受 `StreamingCellInput.style` 数字索引（需配合 `setStylesXml`）。v1 的 stream 路径只支持纯数据，且 `width`/`freezeRows`/`autoFilter`/`merges` 等 `SheetConfig` 布局字段在 stream 模式下仅 `console.warn` 后丢弃（见 4.8 现行源码的 skipped 清单）。需要完整样式的大数据导出（≥5万行）在 Phase 1 暂不支持，业务侧需：① 拆分为 <5 万行（≤49,999）/文件走 Workbook；② 或接受纯数据。这是工程取舍，非 bug。
 >
-> 📌 **Worker 阈值 20,000 行（v2.6 对齐源码）**：main 模式 1万行4列实测 ~117ms、1万行10列 263ms 全阻塞（toBuffer 占大头）。现行产品决策为 <20,000 行接受主线程短阻塞、≥20,000 行进 Worker（提交 0c0fbd5，v1.8 时代曾为 500）。阈值可由调用方通过 `mode` 显式覆盖。
+> **Worker 阈值 20,000 行（v2.6 对齐源码）**：main 模式 1万行4列实测 ~117ms、1万行10列 263ms 全阻塞（toBuffer 占大头）。现行产品决策为 <20,000 行接受主线程短阻塞、≥20,000 行进 Worker（提交 0c0fbd5，v1.8 时代曾为 500）。阈值可由调用方通过 `mode` 显式覆盖。
 
 ### 5.4 降级链路
 
@@ -2793,13 +2819,13 @@ configureWasm({
 });
 ```
 
-> 📌 **路径选择说明**：`require.resolve('modern-xlsx')` 走 `exports['.']`（即 `./dist/index.mjs`）取得真实磁盘目录，自动跟随 pnpm 符号链接，比硬编码 `node_modules/modern-xlsx/dist` 稳。
+> **路径选择说明**：`require.resolve('modern-xlsx')` 走 `exports['.']`（即 `./dist/index.mjs`）取得真实磁盘目录，自动跟随 pnpm 符号链接，比硬编码 `node_modules/modern-xlsx/dist` 稳。
 >
 > 若使用 webpack 5，需在 `module.rules` 配置 `type: 'asset/resource'` 处理 `.wasm` 与 `.mjs` worker，并设置 `experiments.asyncWebAssembly: false`（modern-xlsx 自己管理实例化）。Worker 脚本同理用 `asset/resource` 拷贝后以显式 URL 引用（本项目 Worker 已是标准 ESM 模块，勿用旧版 `worker-loader`）。
 
 ### 6.3 典型调用
 
-> ⚠️ **v2.0 提示**：8 万行会走 worker + stream（≥5 万行阈值，见 4.10/5.3）。stream 路径 v1 不支持 StyleBuilder 样式，故本例中的 style 和 format 在 8 万行场景下实际不生效。若需带样式，请将数据量控制在 <5 万行（≤49,999 行，走 Workbook）。以下示例改用 FormatSpec（worker 兼容）而非函数形式。
+> **v2.0 提示**：8 万行会走 worker + stream（≥5 万行阈值，见 4.10/5.3）。stream 路径 v1 不支持 StyleBuilder 样式，故本例中的 style 和 format 在 8 万行场景下实际不生效。若需带样式，请将数据量控制在 <5 万行（≤49,999 行，走 Workbook）。以下示例改用 FormatSpec（worker 兼容）而非函数形式。
 
 ```ts
 import {
@@ -2856,7 +2882,7 @@ await exportExcel({
 });
 ```
 
-> 📌 **format 两种形式的适用场景（v2.6 阈值对齐）**：函数形式 format: (v) => ... 在浏览器 main 路径（auto <20,000 行）与 Node（main / stream 主线程执行）有效；浏览器 worker 路径（auto ≥20,000 行或显式 worker/stream）会被剥离并 warn（见 4.9）。需要 worker 兼容时用 FormatSpec 对象。需要复杂逻辑时，在导出前自行预处理 data。
+> **format 两种形式的适用场景（v2.6 阈值对齐）**：函数形式 format: (v) => ... 在浏览器 main 路径（auto <20,000 行）与 Node（main / stream 主线程执行）有效；浏览器 worker 路径（auto ≥20,000 行或显式 worker/stream）会被剥离并 warn（见 4.9）。需要 worker 兼容时用 FormatSpec 对象。需要复杂逻辑时，在导出前自行预处理 data。
 
 ---
 
@@ -2875,7 +2901,7 @@ await exportExcel({
 
 `src/__tests__/performance.test.ts`，**本地**回归看门狗（Node 22，单线程；CI 以 `RUN_PERF=0` 跳过，因 shared runner 抖动大）。**本套件只测 WASM-core/fast-writer 回归下限，不替代 7.3 的浏览器端到端验收**（见下方「测什么 / 不测什么」说明）：
 
-> 📌 **测什么 / 不测什么（v2.6 修订，与 1.2 验收表、4.10 pickMode 对齐）**：
+> **测什么 / 不测什么（v2.6 修订，与 1.2 验收表、4.10 pickMode 对齐）**：
 >
 > - **现行口径**：三档均用 `mode:'auto'`。Node 无浏览器 `Worker` 全局（`typeof Worker`/`typeof window` 任一为 `undefined`），auto 在 Node 解析为：<50,000 行 main（1 万行档，测 Workbook 回归）、≥50,000 行 stream（5 万/10 万行档，断言 `r.mode === "stream"`，测 fast-xlsx 回归）。**浏览器现行路由与旧口径不同**：`WORKER_THRESHOLD=20_000`（v2.6 对齐，提交 0c0fbd5），浏览器 1 万行 auto 走 **main**、5 万/10 万行走 worker——Node 数字作为 worker 内等价工作的代理依据，但 worker 端到端还叠加入向结构化克隆（1万 9ms / 5万 46ms / 10万 94ms）+ Worker 启动 + WASM 首次编译 + 出向 Transferable 回传，**从未实测**，属 7.3 Playwright 计划（当前未实现）。
 > - **三档的真正端到端验收（worker 端到端耗时 + 主线程阻塞预算）只能在 7.3 Playwright 进行**（当前未实现）。Node 套件守"core 不退化"，Playwright 套件守"端到端达标"，两者缺一不可（见下方一句话总结）。
@@ -3002,19 +3028,19 @@ describe.runIf(RUN_PERF)(
 // cache (documented 28x first/hot gap). The 50k stream threshold is conservative.
 ```
 
-> 📌 **容差（v2.6 对齐源码）**：`SLACK` 恒为 1.0——本地阈值即产品 SLA 本身（10k <200ms / 50k <500ms / 100k <1000ms）。历史版本的「默认 1.5x、`PERF_TIGHT=1` 收紧到 1.0x」机制已随 CI 跳过策略移除（`PERF_TIGHT` 现无效果，保留读取仅为兼容）。CI 以 `RUN_PERF=0` 跳过整套性能基准。`beforeAll` 的预热避免把 `initWasm()` 的编译耗时计入首个 case——否则首个 case 会无端超阈值 100ms+。
+> **容差（v2.6 对齐源码）**：`SLACK` 恒为 1.0——本地阈值即产品 SLA 本身（10k <200ms / 50k <500ms / 100k <1000ms）。历史版本的「默认 1.5x、`PERF_TIGHT=1` 收紧到 1.0x」机制已随 CI 跳过策略移除（`PERF_TIGHT` 现无效果，保留读取仅为兼容）。CI 以 `RUN_PERF=0` 跳过整套性能基准。`beforeAll` 的预热避免把 `initWasm()` 的编译耗时计入首个 case——否则首个 case 会无端超阈值 100ms+。
 >
-> ⚠️ **worker 模式为何不在 Node 测试（M5 修正）**：经源码核实，`modern-xlsx.worker.js` 与本库 `export.worker.ts` 都用 Web Worker 全局（`globalThis.addEventListener('message')` / `self.onmessage` / `postMessage`），Node 的 `worker_threads` 用 `parentPort`，两者不兼容。因此 5 万行（worker 路径）与 10 万行带样式（worker 路径）的**端到端耗时 + 主线程阻塞 ≤16ms** 必须在 7.3 的浏览器集成测试（Playwright）中验收。Node 套件的 50k/100k case 仅作 core 回归下限，**不能当作 worker 端到端验收通过的依据**——worker 端到端 = core 工作量 + 入向结构化克隆（5 万行 35-100ms，见附录 A）+ Worker 启动 + 出向回传，系统性高于 Node 测出的数值。
+> **worker 模式为何不在 Node 测试（M5 修正）**：经源码核实，`modern-xlsx.worker.js` 与本库 `export.worker.ts` 都用 Web Worker 全局（`globalThis.addEventListener('message')` / `self.onmessage` / `postMessage`），Node 的 `worker_threads` 用 `parentPort`，两者不兼容。因此 5 万行（worker 路径）与 10 万行带样式（worker 路径）的**端到端耗时 + 主线程阻塞 ≤16ms** 必须在 7.3 的浏览器集成测试（Playwright）中验收。Node 套件的 50k/100k case 仅作 core 回归下限，**不能当作 worker 端到端验收通过的依据**——worker 端到端 = core 工作量 + 入向结构化克隆（5 万行 35-100ms，见附录 A）+ Worker 启动 + 出向回传，系统性高于 Node 测出的数值。
 
 ### 7.3 集成测试
 
 - **浏览器端（功能）**：Playwright 跑一个 demo 页面，点击导出，验证下载文件可被 Excel/LibreOffice 打开、行列数正确。
-- **浏览器端（worker 路径端到端 + 主线程预算，S3 关键验收点）**：分别用 5 万行（`mode:'worker'`，阈值 < 1000ms；50000 在 worker 内走 stream）与 10 万行（`mode:'worker'`，阈值 < 2000ms，**最紧张验收点**，见 1.2 ⚠️ 与附录 A 余量仅 1.3-2.2x）触发导出，通过 `PerformanceObserver({ entryTypes: ['longtask'] })` 记录导出期间 >50ms 的长任务数量并断言 longtask 数量（5万行应为 0；10万行因入向结构化克隆 ~94ms > 50ms，允许 ≤1，见附录 A 与下方 100k 用例）；同时记录端到端耗时达标。worker 路径的端到端验收**只能在此处**进行（7.2 Node 套件无法覆盖，见该节 M5 说明）。
+- **浏览器端（worker 路径端到端 + 主线程预算，S3 关键验收点）**：分别用 5 万行（`mode:'worker'`，阈值 < 1000ms；50000 在 worker 内走 stream）与 10 万行（`mode:'worker'`，阈值 < 2000ms，**最紧张验收点**，见 1.2 表与附录 A 余量仅 1.3-2.2x）触发导出，通过 `PerformanceObserver({ entryTypes: ['longtask'] })` 记录导出期间 >50ms 的长任务数量并断言 longtask 数量（5万行应为 0；10万行因入向结构化克隆 ~94ms > 50ms，允许 ≤1，见附录 A 与下方 100k 用例）；同时记录端到端耗时达标。worker 路径的端到端验收**只能在此处**进行（7.2 Node 套件无法覆盖，见该节 M5 说明）。
 - **Node 端（回读校验）**：用 `readBuffer` 读回导出文件，校验单元格值与样式 `styleIndex` 是否命中预期 `cellXfs`。
 
 **Playwright 测试骨架（5 万行 + 10 万行 worker 端到端验收 + 降级）**：
 
-> ⚠️ **以下为规划骨架，尚未实现**：本仓库当前未引入 `@playwright/test`（见附录 F），以下 Playwright 用例为设计阶段规划骨架，待 Phase 1/4 落地后再补齐 demo 页与触发钩子。
+> **以下为规划骨架，尚未实现**：本仓库当前未引入 `@playwright/test`（见附录 F），以下 Playwright 用例为设计阶段规划骨架，待 Phase 1/4 落地后再补齐 demo 页与触发钩子。
 
 ```ts
 import { test, expect } from "@playwright/test";
@@ -3049,7 +3075,7 @@ test("worker-mode 10万行 × 4列: 端到端 < 2000ms 且无 longtask (4列基�
   page,
 }) => {
   // 4 列基准（见 1.2 列数缩放规则）。列数增加时按 budget(4列)×(C/4) 放宽阈值。
-  // 此 case 对应 1.2 表中标 ⚠️ 的最紧验收点。附录 A 自评余量仅 1.3-2.2x，
+  // 此 case 对应 1.2 表的最紧验收点。附录 A 自评余量仅 1.3-2.2x，
   // 若逼近上限，按附录 A 优化方向（减 format 开销 / 预分配 styleIndex / stream 阈值下调）。
   // 注意：100k 带样式走 worker（pickMode 见 4.10）；100k 无样式走 stream，stream 路径
   // 主线程天然不阻塞（逐行写入在 WASM），但端到端耗时仍在此验收。
@@ -3079,9 +3105,9 @@ test("worker-mode WASM 初始化失败时触发降级", async ({ page }) => {
 });
 ```
 
-> 📌 **demo 页面与触发钩子**：上述 `trigger50kExport()` / `trigger100kExport()` / `triggerExport()` 需由一个 Playwright 专用 demo 页面提供（在 `apps/demo` 或 `packages/excel-exporter/demo`，Phase 1 预研阶段搭建）。钩子内部调 `exportExcel({ mode: 'worker', sheets: [{...数据...}] })` 并把 `ExportResult` 挂到 `window` 供断言读取。`wasmFail=1` query 用于注入错误的 `wasmUrl` 触发降级路径（4.12）。**所有触发钩子默认用 4 列基准数据**（与 1.2 列数缩放规则一致）；如需测试更多列，在 query 参数指定（如 `?cols=10`），阈值按 `budget(4列)×(cols/4)` 放宽。
+> **demo 页面与触发钩子**：上述 `trigger50kExport()` / `trigger100kExport()` / `triggerExport()` 需由一个 Playwright 专用 demo 页面提供（在 `apps/demo` 或 `packages/excel-exporter/demo`，Phase 1 预研阶段搭建）。钩子内部调 `exportExcel({ mode: 'worker', sheets: [{...数据...}] })` 并把 `ExportResult` 挂到 `window` 供断言读取。`wasmFail=1` query 用于注入错误的 `wasmUrl` 触发降级路径（4.12）。**所有触发钩子默认用 4 列基准数据**（与 1.2 列数缩放规则一致）；如需测试更多列，在 query 参数指定（如 `?cols=10`），阈值按 `budget(4列)×(cols/4)` 放宽。
 >
-> ⚠️ **10 万行 timeout**：`waitForEvent('download', { timeout: 30000 })` 给足 Worker 端到端 + WASM 编译 + ZIP 序列化的时间。若 CI 频繁超时，先排查是否首次导出未预热（WASM 编译尖峰），参考 5.2 策略 2（主线程 + Worker 并发预热）。
+> **10 万行 timeout**：`waitForEvent('download', { timeout: 30000 })` 给足 Worker 端到端 + WASM 编译 + ZIP 序列化的时间。若 CI 频繁超时，先排查是否首次导出未预热（WASM 编译尖峰），参考 5.2 策略 2（主线程 + Worker 并发预热）。
 
 ---
 
@@ -3127,8 +3153,8 @@ test("worker-mode WASM 初始化失败时触发降级", async ({ page }) => {
 | ------------------------ | --------------------------------------------- | ---------------------- | ---------------------------------------------------- |
 | Workbook 路径 1 万行     | 113–119 ms                                    | ~70 ms                 | 实测（sheetAddAoa + toBuffer）                       |
 | Workbook 路径 5 万行     | 648 ms                                        | ~310 ms                | 实测                                                 |
-| Workbook 路径 8 万行     | **8356 ms** ⚠️                                | —                      | 实测（塌方起始）                                     |
-| Workbook 路径 10 万行    | **17578 ms** ⚠️⚠️                             | ~628 ms                | 实测（塌方，5 个独立进程稳定 17.3-18.3s）            |
+| Workbook 路径 8 万行     | **8356 ms**                                   | —                      | 实测（塌方起始）                                     |
+| Workbook 路径 10 万行    | **17578 ms**                                  | ~628 ms                | 实测（塌方，5 个独立进程稳定 17.3-18.3s）            |
 | Stream 路径 10 万行      | **~1,548 ms**（writeRow ~1,451 + finish ~93） | —                      | v2.0 二次实测（v1.9 记为 1630ms，误差 < 6%，已对齐） |
 | Stream finish() 10 万行  | **~93 ms**（92–128）                          | —                      | v2.0 二次实测（v1.9 误记为 3ms）                     |
 | 结构化克隆 10 万行       | 94 ms                                         | —                      | 实测（structuredClone，中位）                        |
@@ -3148,27 +3174,27 @@ test("worker-mode WASM 初始化失败时触发降级", async ({ page }) => {
 
 **关于官方 README benchmark**：README「写 10 万行 232ms / 5 万行 49ms」**只测 `aoaToSheet`（不含 toBuffer），且是热状态**。不可用作端到端验收依据，更不能据此外推 toBuffer 开销（v1.3 据此外推 100-150ms 是错的，首次实测 17 秒）。
 
-> 📌 **Worker 入向结构化克隆开销（v1.9 实测，修正 v1.8 的 163ms）**：v1.8 声称"10 万行结构化克隆 163ms"是被高估的错误数字（v1.8 据此引入 flat-encoder）。v1.9 实测中位 94ms（5 次测量 92-106ms 稳定）。这个开销在 Worker 端到端里占比：① 10 万行 Workbook 路径首次 17.5s 中占 0.5%；② 10 万行 Stream 路径 1.6s 中占 6%。无论哪种，结构化克隆都不是瓶颈，**无需扁平化优化**（扁平化反而引入硬伤 3 的数据损坏）。
+> **Worker 入向结构化克隆开销（v1.9 实测，修正 v1.8 的 163ms）**：v1.8 声称"10 万行结构化克隆 163ms"是被高估的错误数字（v1.8 据此引入 flat-encoder）。v1.9 实测中位 94ms（5 次测量 92-106ms 稳定）。这个开销在 Worker 端到端里占比：① 10 万行 Workbook 路径首次 17.5s 中占 0.5%；② 10 万行 Stream 路径 1.6s 中占 6%。无论哪种，结构化克隆都不是瓶颈，**无需扁平化优化**（扁平化反而引入硬伤 3 的数据损坏）。
 
 ### 附录 B · 与参考 PDF 的差异修正（重要）
 
 参考 PDF 整体方向正确，但部分 API 调用与实际 modern-xlsx@1.2.0 不符。本文档已逐一修正，列出以备追溯：
 
-| PDF 中的写法                                            | 实际 API（已核实）                                                       | 修正说明                                                                                                                                                                                                                    |
-| ------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ws.cell(0, colIndex)` 数字坐标                         | `ws.cell('A1')` A1 字符串                                                | `cell(ref: string)` 只接收 A1 ref                                                                                                                                                                                           |
-| `ws.batch().writeRows(1, rowData)`                      | `aoaToSheet(aoa)` / `sheetAddAoa(ws, aoa, {origin})`                     | 不存在 `batch()` 方法；批量写靠工具函数                                                                                                                                                                                     |
-| `ws.mergeRange(startRow, startCol, endRow, endCol, '')` | `ws.addMergeCell('A1:D1')`                                               | 合并只接收 A1 range 字符串                                                                                                                                                                                                  |
-| `ws.setFreezePanes(n, 0)`                               | `ws.frozenPane = { rows: n, cols: 0 }`                                   | 通过 setter，不是方法                                                                                                                                                                                                       |
-| `setColumnWidth(colIndex, ...)` 0-based                 | `setColumnWidth(col, width)` **1-based**                                 | PDF 写法存在 off-by-one                                                                                                                                                                                                     |
-| 自建 `export.worker.ts` + `self.onmessage`              | `createXlsxWorker` 只搬序列化；`Workbook.toJSON()` 可导出 `WorkbookData` | ⚠️ 方向**反转**：PDF 写法（自建薄 Worker）反而是本方案采用的正解——`createXlsxWorker.writeBuffer(wb.toJSON())` 技术可行，但只把 ZIP 序列化搬到 Worker，`aoaToSheet` 构造 + 整列样式赋值仍跑主线程，突破 ≤16ms 预算（见 4.9） |
-| `wb.toBuffer()` 后手动 `new Blob([buffer])`             | `writeBlob(wb)` 直接返回 Blob                                            | 浏览器场景有更简洁 API                                                                                                                                                                                                      |
-| WASM 体积「1.1MB」                                      | 实际 `.wasm` 文件 1.9MB（README 1.1MB 为压缩前理论值）                   | 体积评估按 1.9MB                                                                                                                                                                                                            |
-| `s.font({}).build(wb.styles)` 链式                      | ✅ 正确                                                                  | StyleBuilder 链式 API 属实                                                                                                                                                                                                  |
-| `wb.createStyle()`                                      | ✅ 正确                                                                  | 存在该方法                                                                                                                                                                                                                  |
-| `initWasm()` 幂等                                       | ✅ 正确                                                                  | README 明确 safe to call multiple times                                                                                                                                                                                     |
-| benchmark 数字（232/49/472ms）                          | ✅ 与官方 README 完全一致                                                | 数字属实                                                                                                                                                                                                                    |
-| —（PDF 未提及）                                         | `Workbook.toJSON(): WorkbookData`                                        | 核心序列化方法存在，`writeBlob` 内部即 `wb.toJSON()`                                                                                                                                                                        |
+| PDF 中的写法                                            | 实际 API（已核实）                                                       | 修正说明                                                                                                                                                                                                                 |
+| ------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ws.cell(0, colIndex)` 数字坐标                         | `ws.cell('A1')` A1 字符串                                                | `cell(ref: string)` 只接收 A1 ref                                                                                                                                                                                        |
+| `ws.batch().writeRows(1, rowData)`                      | `aoaToSheet(aoa)` / `sheetAddAoa(ws, aoa, {origin})`                     | 不存在 `batch()` 方法；批量写靠工具函数                                                                                                                                                                                  |
+| `ws.mergeRange(startRow, startCol, endRow, endCol, '')` | `ws.addMergeCell('A1:D1')`                                               | 合并只接收 A1 range 字符串                                                                                                                                                                                               |
+| `ws.setFreezePanes(n, 0)`                               | `ws.frozenPane = { rows: n, cols: 0 }`                                   | 通过 setter，不是方法                                                                                                                                                                                                    |
+| `setColumnWidth(colIndex, ...)` 0-based                 | `setColumnWidth(col, width)` **1-based**                                 | PDF 写法存在 off-by-one                                                                                                                                                                                                  |
+| 自建 `export.worker.ts` + `self.onmessage`              | `createXlsxWorker` 只搬序列化；`Workbook.toJSON()` 可导出 `WorkbookData` | 方向**反转**：PDF 写法（自建薄 Worker）反而是本方案采用的正解——`createXlsxWorker.writeBuffer(wb.toJSON())` 技术可行，但只把 ZIP 序列化搬到 Worker，`aoaToSheet` 构造 + 整列样式赋值仍跑主线程，突破 ≤16ms 预算（见 4.9） |
+| `wb.toBuffer()` 后手动 `new Blob([buffer])`             | `writeBlob(wb)` 直接返回 Blob                                            | 浏览器场景有更简洁 API                                                                                                                                                                                                   |
+| WASM 体积「1.1MB」                                      | 实际 `.wasm` 文件 1.9MB（README 1.1MB 为压缩前理论值）                   | 体积评估按 1.9MB                                                                                                                                                                                                         |
+| `s.font({}).build(wb.styles)` 链式                      | ✅ 正确                                                                  | StyleBuilder 链式 API 属实                                                                                                                                                                                               |
+| `wb.createStyle()`                                      | ✅ 正确                                                                  | 存在该方法                                                                                                                                                                                                               |
+| `initWasm()` 幂等                                       | ✅ 正确                                                                  | README 明确 safe to call multiple times                                                                                                                                                                                  |
+| benchmark 数字（232/49/472ms）                          | ✅ 与官方 README 完全一致                                                | 数字属实                                                                                                                                                                                                                 |
+| —（PDF 未提及）                                         | `Workbook.toJSON(): WorkbookData`                                        | 核心序列化方法存在，`writeBlob` 内部即 `wb.toJSON()`                                                                                                                                                                     |
 
 ### 附录 C · 关键依赖版本清单（建议锁定）
 
@@ -3176,9 +3202,9 @@ test("worker-mode WASM 初始化失败时触发降级", async ({ page }) => {
 | ------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------ |
 | modern-xlsx        | ^1.2.0                        | 核心引擎                                                                                         |
 | xlsx（SheetJS CE） | >=0.18.5（npm latest 即此版） | 降级方案（optional peerDep）；v1.9 从 >=0.20.0 放宽，避免 strict-peer-dependencies 报错，见 4.12 |
-| typescript         | ^5.6.3                        | 语言                                                                                             |
+| typescript         | ^5.9.3                        | 语言                                                                                             |
 | tsup               | ^8.3.5                        | 包构建                                                                                           |
-| vitest             | ^2.1.6                        | 测试                                                                                             |
+| vitest             | ^4.1.10                       | 测试                                                                                             |
 | turbo              | ^2.3.3                        | Monorepo 编排                                                                                    |
 | pnpm               | 9.12.0                        | 包管理（packageManager 字段）                                                                    |
 | @changesets/cli    | ^2.27.10                      | 版本/发布                                                                                        |
@@ -3233,7 +3259,7 @@ const blob = new Blob([bytes], {
 });
 ```
 
-**取舍建议**：`drawTableFromData` 适用于 80% 以上的常规导出场景（单表头 + 统一列样式）。当需要非标准布局（多行表头、跨 Sheet 公式、条件格式、图表）或需要每列独立 `StyleBuilder` 构建的精细样式控制时，回退到 `WorkbookBuilder` 手动路径。`drawTableFromData` 内部也是 WASM 批量写入，性能不会比手动 AOA 差。对于仅需纯数据流式导出（无样式）的场景，仍使用 `StreamingXlsxWriter`（4.8）。建议在 `workbook-builder.ts` 中加入 `useDrawTable` 选项，默认走 `drawTableFromData`，用户可显式指定 `useDrawTable: false` 回退手动路径。
+**取舍建议**：`drawTableFromData` 适用于多数常规导出场景（单表头 + 统一列样式）。当需要非标准布局（多行表头、跨 Sheet 公式、条件格式、图表）或需要每列独立 `StyleBuilder` 构建的精细样式控制时，回退到 `WorkbookBuilder` 手动路径。`drawTableFromData` 内部也是 WASM 批量写入，性能不会比手动 AOA 差。对于仅需纯数据流式导出（无样式）的场景，仍使用 `StreamingXlsxWriter`（4.8）。建议在 `workbook-builder.ts` 中加入 `useDrawTable` 选项，默认走 `drawTableFromData`，用户可显式指定 `useDrawTable: false` 回退手动路径。
 
 ---
 
@@ -3243,7 +3269,7 @@ const blob = new Blob([bytes], {
 
 ### 附录 F · Node 版本与补充依赖（v2.1 重写）
 
-> 📌 **本仓库用 Node 22，不升级到 24**：`@marcusok/excel-exporter` 与 monorepo 根的 `engines.node` 均为 `>=22.0.0`，`.nvmrc` 锁定 `22`，CI `node-version: 22`。核心依赖 modern-xlsx@1.2.0 的 `engines.node` 声明为 `>=24.0.0`，但其 WASM 核心面向浏览器、与 Node 版本无关；本仓库在 Node 22（v22.22.2）下 `lint/typecheck/test/build` 全绿（47 个用例实测通过；CI 以 `RUN_PERF=0` 跳过 4 个性能基准、实跑 43 个，v2.6 更新）。注意：modern-xlsx README 无 "Node Usage" 章节，其顶部声明要求 "Node.js 24+"，Node 22 可用性由本仓库测试实测而非 README 声明。`.npmrc` 设 `engine-strict=false`，避免 modern-xlsx 的 engines 声明在 Node 22 下阻断 `pnpm install`（见 3.5）。本地推荐 fnm/nvm 并 `fnm use`（读 `.nvmrc`）。
+> **本仓库用 Node 22，不升级到 24**：`@marcusok/excel-exporter` 与 monorepo 根的 `engines.node` 均为 `>=22.0.0`，`.nvmrc` 锁定 `22`，CI `node-version: 22`。核心依赖 modern-xlsx@1.2.0 的 `engines.node` 声明为 `>=24.0.0`，但其 WASM 核心面向浏览器、与 Node 版本无关；本仓库在 Node 22（v22.22.2）下 `lint/typecheck/test/build` 全绿（47 个用例实测通过；CI 以 `RUN_PERF=0` 跳过 4 个性能基准、实跑 43 个，v2.6 更新）。注意：modern-xlsx README 无 "Node Usage" 章节，其顶部声明要求 "Node.js 24+"，Node 22 可用性由本仓库测试实测而非 README 声明。`.npmrc` 设 `engine-strict=false`，避免 modern-xlsx 的 engines 声明在 Node 22 下阻断 `pnpm install`（见 3.5）。本地推荐 fnm/nvm 并 `fnm use`（读 `.nvmrc`）。
 >
 > v2.0 曾把 `@playwright/test`（`^1.62.0`）列入「补充依赖」、并写「Node 24+ 升级指引」，二者均与实际仓库不符（本仓库无 Playwright、CI 跑 Node 22），v2.1 已删除该依赖行与升级指引。关于 `unplugin`：6.2 的 Vite 插件是 Vite 原生插件对象（`{ name, buildStart() }`），全程未 import `unplugin`；若未来要让资源拷贝同时支持 Webpack，再按需引入。
 

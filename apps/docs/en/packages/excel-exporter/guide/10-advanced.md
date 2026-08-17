@@ -57,11 +57,11 @@ await exportExcel({
 
 Phase semantics:
 
-| Phase      | Description                                                                             |
-| ---------- | --------------------------------------------------------------------------------------- |
-| `init`     | WASM initialization (measured only on first load); not reported by the SheetJS fallback |
-| `build`    | Workbook construction (reported once per actual attempt, including fallback)            |
-| `download` | Browser download trigger (absent with `download: false`; absent in Node)                |
+| Phase      | Description                                                                                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `init`     | WASM init; reported on every main-path export (~0ms once loaded), on Worker + Workbook only when the worker initializes, never on Worker + stream or the SheetJS fallback |
+| `build`    | Workbook construction (reported once per actual attempt, including fallback)                                                                                              |
+| `download` | Browser download trigger (absent with `download: false`; absent in Node)                                                                                                  |
 
 > `onPhase` measures per-phase wall time only; `ExportResult.duration` always measures the whole export.
 

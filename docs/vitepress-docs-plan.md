@@ -9,7 +9,7 @@
 - 库包介绍与生态总览
 - 详细使用方法（安装、配置、API）
 - 使用案例（含 mock 数据生成与可交互示例）
-- 现代化、有吸引力的页面交互
+- 清晰的页面结构与交互
 - 面向未来多包扩展的结构（新增包时改动最小）
 
 ## 2. 现状梳理（基于事实）
@@ -26,6 +26,8 @@
 | CI/CD     | `.github/workflows/ci.yml`（lint/typecheck/test/build）、`release.yml`（changesets 发布 npm）       |
 | 内部文档  | 根目录 `docs/` 存放设计/流程文档（excel-export-design.md 等），属于内部文档，与公开文档站**不混用** |
 
+> 注：上表为 2026-08-03 规划时的快照。此后 workspace 已加入 `apps/*`，excel-exporter 已发布到 1.0.x，CI/CD 增加了 `deploy.yml`（文档站部署）。
+
 ### 2.2 excel-exporter 公开 API（文档站内容来源）
 
 已从 `packages/excel-exporter/src/` 核实，公开面包括：
@@ -33,13 +35,13 @@
 - 入口：`exportExcel(options)`、`configureWasm()`、`WorkbookBuilder`、`exportAsStream`
 - 类型：`ExportOptions`、`SheetConfig`、`ColumnConfig`、`CellStyle`、`FormatSpec`、`ExportMode`、`ExportResult`
 - 样式：`StylePresets`（header / currency / percent / date / datetime / dataRow / danger，共 7 种）
-- 能力：自动模式路由（<500 行 main；≥500 行 Worker+Workbook；≥50,000 行 Worker+Stream）、进度回调 `onProgress`、阶段回调 `onPhase`、SheetJS 降级兜底
+- 能力：自动模式路由（< 20,000 行 main；≥ 20,000 行 Worker+Workbook；≥ 50,000 行 Worker+Stream；早期阈值曾是 500 行，后在 0c0fbd5 调整为 20,000）、进度回调 `onProgress`、阶段回调 `onPhase`、SheetJS 降级兜底
 - 依赖约定：`modern-xlsx` 为必装 peerDep，`xlsx` 为可选兜底；浏览器需静态部署 `modern-xlsx.wasm` 与 `export.worker.js`
-- 性能数据：README/设计文档中有真实基准（1 万行 main 109ms / 5 万行 618ms / 10 万行 stream 1,548ms 等）
+- 性能数据：README/设计文档中有真实基准（1 万行 ~120ms / 5 万行 ~400ms / 10 万行 ~780ms，Chrome 实测口径见 README；规划早期引用过 StreamingXlsxWriter 时代的 109/618/1,548ms，已被 fast-xlsx 实测取代）
 
 ### 2.3 需要提前说明的现状问题
 
-1. **git 远程是占位地址**：`git@github.com:yourbusiness/marcus-monorepo.git`。GitHub Pages 项目站点的访问路径是 `https://<owner>.github.io/<repo>/`，`base` 配置依赖真实仓库名，部署前需要确认真实 owner/repo。
+1. **git 远程地址已确认**：remote 为 `git@github.com:yourbusiness/marcus-monorepo.git`，`yourbusiness` 是真实的 GitHub owner（非占位符），站点已按 `https://yourbusiness.github.io/marcus-monorepo/` 部署上线。（规划时曾把它当作占位地址，后来确认即为真实仓库。）
 2. **根 README 存在编码问题**（GBK 内容被当作 UTF-8 显示为乱码）。公开文档站内容将全部新写（UTF-8），不直接复用 README 文本；README 修复可作为独立事项另行处理。
 3. GitHub Pages 需要仓库所有者先在仓库 Settings → Pages 中把 Source 设为 **GitHub Actions**；私有仓库的 Pages 服务需要付费计划（Pro/Team/Enterprise）。
 
@@ -81,7 +83,7 @@ configure-pages@v4 / upload-pages-artifact@v3 / deploy-pages@v4（实测各 Acti
 - 文档站提供 `dev / build / preview` 脚本并接入 turbo：根 `pnpm build` 会一并构建文档站，**CI 每次 PR 都会验证文档可构建**，提前发现问题；
 - 文档站输出目录是 `.vitepress/dist`（不符合根 turbo 的 `dist/**` 输出规则），因此在 `apps/docs/turbo.json` 用 `{"extends": ["//"]}` 覆写 `build.outputs` 为 `[".vitepress/dist/**"]`；
 - 根 package.json 增加 `dev:docs` / `build:docs` 便捷脚本（`turbo run ... --filter=@marcusok/docs`）；
-- 文档站 v1 不接入 lint/typecheck（VitePress 构建本身会校验 config；根 eslint 面向 React/TS，`.vue` 组件需要额外的 vue 解析器，暂不引入，避免为文档站污染根工具链）；文档站通过 turbo build 在 CI 中持续受检。
+- 文档站 v1 曾计划不接入 lint/typecheck（构建校验兜底）；现已补齐——`apps/docs` 提供 `lint`（eslint + check-i18n）与 `typecheck`（vue-tsc）脚本，根工具链也已加入 vue-eslint-parser / vue-tsc。
 
 ## 4. 目录结构
 
@@ -149,7 +151,7 @@ apps/docs/                          # workspace 包 @marcusok/docs（private）
 
 > 说明：**性能数字是真实基准数据并标注来源**；"数据采用 mock" 指**案例演示数据**由确定性 mock 生成器产生（见 §7），不混用真实业务数据。
 
-## 6. 现代化交互设计（v1 范围）
+## 6. 交互设计（v1 范围）
 
 基于 VitePress 默认主题扩展，不引入重型 UI 框架：
 
@@ -182,9 +184,9 @@ apps/docs/                          # workspace 包 @marcusok/docs（private）
 - 上传 `apps/docs/.vitepress/dist`；
 - Pages 专用 Actions 版本按官方示例选取（实施时以官方 deploy 文档最新示例为准，当前为 configure-pages@v4 / upload-pages-artifact@v3 / deploy-pages@v4；实测最新 major 为 v6/v5/v5）。
 
-### 8.2 一次性前置条件（需用户确认/执行）
+### 8.2 一次性前置条件（实施前清单，落地时均已处理）
 
-1. 确认真实 GitHub 仓库地址（当前 remote 为占位 `yourbusiness/marcus-monorepo`），并据此校准 `base`；
+1. GitHub 仓库地址已确认：remote 即 `yourbusiness/marcus-monorepo`（`yourbusiness` 为真实 owner），`base` 已据此配置；
 2. 仓库 Settings → Pages → Build and deployment → Source = **GitHub Actions**；
 3. 如为私有仓库，确认 GitHub 计划支持 Pages；
 4. 确认文档语言：建议**中文优先**（与现有 README 语言一致），VitePress 天然支持 i18n，后续可加英文；
@@ -196,7 +198,7 @@ apps/docs/                          # workspace 包 @marcusok/docs（private）
 | ------- | ------------------------------------------------------------------ | ------------------------------------------------------- |
 | M1 骨架 | workspace 接入 apps/*、文档站脚手架、config、首页雏形、deploy.yml  | 本地 `pnpm dev` 可跑，PR 即构建校验，push main 自动部署 |
 | M2 内容 | excel-exporter 介绍/指南/API/FAQ 全部页面                          | 完整可查阅的文档主体                                    |
-| M3 交互 | 自定义 Home、mock 生成器、live demo、性能图表、搜索中文文案        | 现代化观感 + 真实可用的在线示例                         |
+| M3 交互 | 自定义 Home、mock 生成器、live demo、性能图表、搜索中文文案        | 定制视觉 + 真实可用的在线示例                           |
 | M4 收尾 | 404 页、lastUpdated、README 入口链接、文档站使用说明（如何加新包） | 可长期维护                                              |
 
 ## 10. 风险与权衡

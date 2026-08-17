@@ -1,6 +1,6 @@
 # Performance
 
-Numbers below come from local measurements (real Chrome + Play's 6 mixed-type columns); Node independent-process regression lives in `src/__tests__/performance.test.ts`.
+Numbers below come from local measurements (real Chrome, 6 mixed-type columns); Node independent-process regression lives in `src/__tests__/performance.test.ts`.
 
 ## Benchmarks
 
@@ -23,6 +23,6 @@ Numbers below come from local measurements (real Chrome + Play's 6 mixed-type co
 ## Optimization tips
 
 - Stay on `mode: "auto"`; never force `main` for large files;
-- Keep styled exports ≤ 50k rows; for larger data accept degraded styling or split sheets;
+- Keep styled exports under 50k rows; for larger data accept degraded styling or split sheets;
 - **Set `decimals` explicitly** on `number` columns for consistent stored values across paths (Workbook/Stream/fallback);
 - Run large server-side exports in background tasks.
