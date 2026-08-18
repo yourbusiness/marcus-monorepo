@@ -13,7 +13,7 @@ export interface LoaderOptions {
   maxRetries?: number;
 }
 
-class WasmLoader {
+export class WasmLoader {
   private state: LoadState = "idle";
   private promise: Promise<void> | null = null;
   private opts: LoaderOptions;
@@ -42,12 +42,14 @@ class WasmLoader {
    * loader is already ready (or mid-load), reset so the next ensureLoaded
    * re-initializes from the new URL; otherwise keep the loaded state. This avoids
    * discarding an already-loaded WASM module when only timeouts/retries change.
+   * A previous load *error* is always cleared by a reconfiguration, so the next
+   * ensureLoaded retries with the new settings instead of throwing forever.
    */
   updateOptions(opts: LoaderOptions): void {
     const urlChanged =
       opts.wasmUrl !== undefined && opts.wasmUrl !== this.opts.wasmUrl;
     this.opts = { ...this.opts, ...opts };
-    if (urlChanged && this.state !== "idle") {
+    if ((urlChanged && this.state !== "idle") || this.state === "error") {
       this.state = "idle";
       this.promise = null;
     }
@@ -124,7 +126,8 @@ export function getWasmLoader(): WasmLoader {
  * Inject CDN / self-hosted URLs and timeout config at app entry. Merges into the
  * existing loader rather than replacing it, so an already-loaded WASM module is
  * kept unless the WASM URL actually changes (in which case the next ensureLoaded
- * re-initializes from the new URL).
+ * re-initializes from the new URL). A previous load error is always cleared, so
+ * calling this after a failure makes the next export retry with the new settings.
  */
 export function configureWasm(opts: LoaderOptions): void {
   defaultLoader.updateOptions(opts);

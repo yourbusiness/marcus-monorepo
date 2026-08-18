@@ -83,7 +83,7 @@ configureWasm({
 | `timeoutMs`  | `number`        | `10_000` | Per-attempt load timeout                                            |
 | `maxRetries` | `number`        | `3`      | Max attempts; 3 by default — failed attempts wait 300ms, then 600ms |
 
-`configureWasm` merges options: only a changed `wasmUrl` resets an already-loaded WASM instance; changing timeouts/retries alone never causes re-initialization.
+`configureWasm` merges options: only a changed `wasmUrl` resets an already-loaded (or mid-load) WASM instance; changing timeouts/retries alone never causes re-initialization. If a previous load failed (error state), any `configureWasm` call clears the error so the next export retries with the new settings.
 
 ## Node / SSR
 

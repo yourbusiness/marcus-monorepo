@@ -267,6 +267,8 @@ export function exportFastXlsx(
   }
 
   const bytes = zipSync(files, { level: 1 });
-  onProgress?.(1);
+  // No trailing onProgress(1) here: every 1,000-row checkpoint reports the
+  // final position, and exportExcel emits the single terminal 1 for all paths
+  // (emitting it here too duplicated the last callback on stream routes).
   return { bytes, rowCount: processed.count };
 }

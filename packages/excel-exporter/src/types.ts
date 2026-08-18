@@ -41,6 +41,14 @@ export interface CellStyle {
  * Worker-compatible, data-describing format spec. Functions cannot cross the
  * structured-clone boundary into a Web Worker, so worker/stream mode accepts
  * FormatSpec only. Function form works in `main` mode (browser <20,000 rows / Node).
+ *
+ * Date semantics: `date`/`datetime` interpret values by their **UTC
+ * components**. The workbook path serializes via modern-xlsx's `dateToSerial`
+ * (UTC wall clock) and the stream/SheetJS paths format the same UTC components
+ * into strings, so all paths agree in every timezone. Date-only ISO strings
+ * ("2025-01-05") parse as UTC midnight per ECMA-262; prefer them (or
+ * `Date.UTC(...)`) over locally-constructed Dates, whose UTC components can
+ * fall on the previous day in non-UTC timezones.
  */
 export type FormatSpec =
   | { type: "enum"; map: Record<string, string>; fallback?: string }
@@ -127,7 +135,11 @@ export interface ExportOptions {
   filename: string;
   /** Mode selection: auto = auto-decide by row count (default). */
   mode?: ExportMode;
-  /** Progress callback (0-1); effective in worker/stream mode only. */
+  /**
+   * Progress callback (0-1). The stream path reports intermediate values every
+   * 1,000 rows; other paths report only the trailing pair 0 and 1. The final 1
+   * is emitted exactly once by `exportExcel` itself.
+   */
   onProgress?: (progress: number) => void;
   /**
    * Optional per-stage timing callback. Receives the phase name and its

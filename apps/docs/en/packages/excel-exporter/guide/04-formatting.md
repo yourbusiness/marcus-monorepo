@@ -69,3 +69,5 @@ Behavior differs slightly between paths — always set `decimals` explicitly:
 ## Dates
 
 `date` / `datetime` accept `Date` objects, parseable strings or timestamps. The Workbook path writes a serial + `numFormat`; Stream / SheetJS paths (no `numFormat` support) emit readable strings per the pattern (`mm` resolves to minutes vs month by its context).
+
+**Timezone convention (consistent across paths)**: `date` / `datetime` interpret and render values by their **UTC components** — the workbook serial comes from modern-xlsx's `dateToSerial` (UTC wall clock) and the stream/SheetJS strings use the same UTC components, so one input renders identically on every path in every timezone. ISO date strings (`"2026-07-01"`) parse as UTC midnight per ECMA-262 and fit this convention natively. Note that Dates constructed with local time (`new Date(year, month, day)`) carry UTC components that can fall on the previous day in non-UTC timezones (local midnight in UTC+8 = 16:00 UTC the day before). Prefer ISO strings or `Date.UTC(...)` for timezone-stable date columns.

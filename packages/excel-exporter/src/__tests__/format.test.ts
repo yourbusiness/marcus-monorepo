@@ -121,8 +121,11 @@ describe("numFormatForSpec", () => {
 });
 
 describe("formatDateByPattern", () => {
+  // Inputs are UTC-constructed so the expected strings hold in every runner
+  // timezone: formatDateByPattern formats the date's UTC components (matching
+  // the workbook path's dateToSerial, which also uses UTC components).
   it("formats a Date per the given pattern", () => {
-    const d = new Date(2025, 0, 5, 14, 30, 9);
+    const d = new Date(Date.UTC(2025, 0, 5, 14, 30, 9));
     expect(formatDateByPattern(d, "yyyy-MM-dd")).toBe("2025-01-05");
     expect(formatDateByPattern(d, "yyyy-MM-dd HH:mm")).toBe("2025-01-05 14:30");
     expect(formatDateByPattern(d, "dd/MM/yyyy HH:mm:ss")).toBe(
@@ -131,7 +134,7 @@ describe("formatDateByPattern", () => {
   });
 
   it("is case-insensitive and resolves mm as month vs minute by context", () => {
-    const d = new Date(2025, 0, 5, 14, 30);
+    const d = new Date(Date.UTC(2025, 0, 5, 14, 30));
     // lowercase mm in a date position is the month (was: read as minutes=30)
     expect(formatDateByPattern(d, "yyyy-mm-dd")).toBe("2025-01-05");
     // fully lowercase still parses
@@ -143,12 +146,32 @@ describe("formatDateByPattern", () => {
     expect(formatDateByPattern(d, "mm/dd")).toBe("01/05");
   });
 
-  it("parses date-coercible strings", () => {
+  it("parses date-coercible strings (ISO date-only = UTC midnight)", () => {
     expect(formatDateByPattern("2025-01-05", "yyyy-MM-dd")).toBe("2025-01-05");
   });
 
   it("returns the raw stringified value for non-date input", () => {
     expect(formatDateByPattern("not-a-date", "yyyy-MM-dd")).toBe("not-a-date");
+  });
+
+  it("uses UTC components, agreeing with the workbook path's serial", () => {
+    // Regression guard for the cross-path date bug: formatDateByPattern used
+    // local components while dateToSerial uses UTC ones, so the same input
+    // could render a different day above/below the 50k-row stream threshold
+    // (e.g. local midnight in UTC+8 -> previous day on the workbook path).
+    // A local-midnight date maximizes the local-vs-UTC divergence.
+    const localMidnight = new Date(2025, 0, 5, 0, 0, 0);
+    const serial = applyFormat(localMidnight, { type: "date" }) as number;
+    const fromSerial = serialToDate(serial); // UTC-components Date
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const expected = `${fromSerial.getUTCFullYear()}-${pad(
+      fromSerial.getUTCMonth() + 1,
+    )}-${pad(fromSerial.getUTCDate())}`;
+    expect(formatDateByPattern(localMidnight, "yyyy-MM-dd")).toBe(expected);
+    // And an ISO string renders as its own calendar day on both paths.
+    expect(formatDateByPattern("2025-01-05", "yyyy-MM-dd")).toBe(
+      formatDateByPattern(new Date("2025-01-05T00:00:00Z"), "yyyy-MM-dd"),
+    );
   });
 });
 

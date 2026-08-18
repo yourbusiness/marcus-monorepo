@@ -69,3 +69,5 @@ columns: [
 ## 日期值
 
 `date` / `datetime` 接受 `Date` 对象、可解析字符串或时间戳。Workbook 路径写入日期序列 + `numFormat`；Stream / SheetJS 路径（无 `numFormat` 支持）会按 pattern 输出可读字符串（`mm` 会自动按前后文区分月份与分钟）。
+
+**时区约定（跨路径一致）**：`date` / `datetime` 统一按值的 **UTC 分量**解释与输出——Workbook 路径的序列来自 modern-xlsx 的 `dateToSerial`（UTC 口径），Stream / SheetJS 路径的字符串同样取 UTC 分量，因此同一输入在任何时区、任何路径下显示一致；ISO 日期字符串（如 `"2026-07-01"`）按 ECMA-262 解析为 UTC 午夜，天然符合该口径。注意 `new Date(年, 月, 日)` 这类**本地时间**构造的 Date，其 UTC 分量在非零时区可能落到前一天（例如 UTC+8 的本地 0 点 = 前一日 16:00 UTC）。为保证跨时区一致，日期列建议传 ISO 字符串或用 `Date.UTC(...)` 构造。

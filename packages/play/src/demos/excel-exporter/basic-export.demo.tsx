@@ -45,7 +45,7 @@ import {
 } from "./metrics.js";
 
 // 模块加载时配置 WASM + worker URL，保证 worker/stream 模式可用。
-// 不配置 workerUrl 时 exportExcel 会静默降级到 SheetJS fallback。
+// 不配置 workerUrl 时 exportExcel 会打印 [excel-exporter] 警告并降级到 SheetJS fallback。
 configureWasm({ workerUrl, wasmUrl });
 
 const HISTORY_LIMIT = 10;
@@ -93,7 +93,7 @@ interface RunRecord {
   engine: string;
   rows: number;
   cols: number;
-  durationMs: number | null; // 库内测量：init + build
+  durationMs: number | null; // 库内测量：完整导出耗时（含 init/build/download 或降级）
   wallMs: number | null; // play 测量：点击 -> exportExcel resolve
   sizeBytes: number | null;
   mime: string | null;

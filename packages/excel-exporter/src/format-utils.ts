@@ -81,6 +81,14 @@ export function numFormatForSpec(spec: FormatSpec): string | null {
  * Format a Date (or date-coercible value) into a display string using an
  * Excel-style pattern (tokens: yyyy MM dd HH mm ss). Used by the streaming
  * path, which has no numFormat support and must emit readable date strings.
+ *
+ * Uses the date's **UTC components** (not local ones), matching modern-xlsx's
+ * `dateToSerial` (the workbook path also derives the serial from UTC
+ * components). The same input therefore renders identically on the workbook,
+ * stream and SheetJS paths in every timezone. Note that date-only ISO strings
+ * ("2025-01-05") parse as UTC midnight per ECMA-262, while locally-constructed
+ * Dates (`new Date(2025, 0, 5)`) carry local wall time whose UTC components can
+ * fall on the previous day in non-UTC timezones.
  */
 export function formatDateByPattern(value: unknown, pattern: string): string {
   const d = toJsDate(value);
@@ -92,12 +100,12 @@ export function formatDateByPattern(value: unknown, pattern: string): string {
   // its predecessor so `yyyy-mm-dd`, `yyyy-MM-dd` and `HH:mm:ss` all match.
   const lower = pattern.toLowerCase();
   const parts = {
-    yyyy: String(d.getFullYear()),
-    month: pad(d.getMonth() + 1),
-    dd: pad(d.getDate()),
-    hh: pad(d.getHours()),
-    minute: pad(d.getMinutes()),
-    ss: pad(d.getSeconds()),
+    yyyy: String(d.getUTCFullYear()),
+    month: pad(d.getUTCMonth() + 1),
+    dd: pad(d.getUTCDate()),
+    hh: pad(d.getUTCHours()),
+    minute: pad(d.getUTCMinutes()),
+    ss: pad(d.getUTCSeconds()),
   };
   const TOKEN = /yyyy|mm|dd|hh|ss/g;
   const hits: { tok: string; idx: number }[] = [];

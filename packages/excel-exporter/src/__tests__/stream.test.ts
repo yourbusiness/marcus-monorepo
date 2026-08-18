@@ -64,8 +64,13 @@ describe("exportAsStream round-trip", () => {
           },
           { key: "dt", header: "DateTime", format: { type: "datetime" } },
         ],
+        // UTC-constructed so the expected strings hold in every timezone
+        // (stream formats UTC components, matching the workbook serial).
         data: [
-          { d: new Date(2025, 0, 5, 14, 30), dt: new Date(2025, 0, 5, 14, 30) },
+          {
+            d: new Date(Date.UTC(2025, 0, 5, 14, 30)),
+            dt: new Date(Date.UTC(2025, 0, 5, 14, 30)),
+          },
         ],
       },
     ]);

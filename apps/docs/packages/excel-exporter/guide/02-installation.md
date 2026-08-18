@@ -83,7 +83,7 @@ configureWasm({
 | `timeoutMs`  | `number`        | `10_000` | 单次加载超时                                                    |
 | `maxRetries` | `number`        | `3`      | 最大尝试次数；默认 3 次尝试，失败后按 300ms、600ms 指数退避等待 |
 
-`configureWasm` 是合并语义：仅当 `wasmUrl` 变化时才重置已加载的 WASM 实例，只改超时/重试不会造成重复初始化。
+`configureWasm` 是合并语义：仅当 `wasmUrl` 变化时才重置已加载（或加载中）的 WASM 实例，只改超时/重试不会造成重复初始化；若此前加载失败（error 态），任意 `configureWasm` 调用都会清除错误态，下次导出按新配置重试。
 
 ## Node / SSR
 

@@ -30,7 +30,7 @@ Outputs the mapped label; unmapped values use `fallback`, or pass through when a
 { type: "datetime", pattern: "yyyy-MM-dd HH:mm:ss" }
 ```
 
-Accepts `Date` / parseable string / timestamp. The Workbook path writes an Excel date serial and auto-injects `numFormat`; Stream/SheetJS paths output the pattern-formatted string.
+Accepts `Date` / parseable string / timestamp. The Workbook path writes an Excel date serial and auto-injects `numFormat`; Stream/SheetJS paths output the pattern-formatted string. Values are interpreted by their **UTC components** (matching the workbook serial's `dateToSerial` convention, so all paths and timezones render the same); ISO date strings parse as UTC midnight per ECMA-262 — see the timezone note in [Value Formatting](/en/packages/excel-exporter/guide/04-formatting).
 
 ### number
 

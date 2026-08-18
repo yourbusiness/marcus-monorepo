@@ -30,7 +30,7 @@ type FormatSpec =
 { type: "datetime", pattern: "yyyy-MM-dd HH:mm:ss" }
 ```
 
-接受 `Date` / 可解析字符串 / 时间戳。Workbook 路径写入 Excel 日期序列并自动注入 `numFormat`；Stream/SheetJS 路径输出 pattern 格式化字符串。
+接受 `Date` / 可解析字符串 / 时间戳。Workbook 路径写入 Excel 日期序列并自动注入 `numFormat`；Stream/SheetJS 路径输出 pattern 格式化字符串。统一按 **UTC 分量**解释（与 Workbook 序列的 `dateToSerial` 口径一致，跨路径/跨时区显示相同）；ISO 日期字符串按 ECMA-262 解析为 UTC 午夜，详见[值格式化的时区约定](/packages/excel-exporter/guide/04-formatting)。
 
 ### number
 

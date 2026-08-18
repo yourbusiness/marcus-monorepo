@@ -195,9 +195,12 @@ export const packages: PackageEntry[] = [
       {
         // Resolve through @marcusok/excel-exporter so the docs app does not
         // need modern-xlsx as a direct dep (pnpm auto-install-peers pulls
-        // it in as excel-exporter's peerDep). Renamed on copy: the worker
-        // resolves its wasm via `new URL("modern_xlsx_wasm_bg.wasm", import.meta.url)`,
-        // so the dist file `modern-xlsx.wasm` must land under that exact name.
+        // it in as excel-exporter's peerDep). Copied under the wasm-bindgen
+        // default name (modern_xlsx_wasm_bg.wasm) as a defensive measure: if
+        // `configureWasm({ wasmUrl })` were ever omitted, the bundled worker
+        // would fall back to `new URL("modern_xlsx_wasm_bg.wasm", import.meta.url)`
+        // and still find the file next to itself. With wasmUrl configured
+        // (the ExportDemo does), the file name is otherwise arbitrary.
         resolveFrom: "modern-xlsx",
         through: "@marcusok/excel-exporter",
         file: "modern-xlsx.wasm",

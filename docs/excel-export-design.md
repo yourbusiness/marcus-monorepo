@@ -10,6 +10,8 @@
 
 > 🔄 **v2.6（源码再对齐，2026-08-17）**：正文多处仍以 `WORKER_THRESHOLD = 500` 为现行口径，与 `src/index.ts` 现状（`WORKER_THRESHOLD = 20_000`，提交 0c0fbd5 起）不符——**浏览器 auto 现为 <20,000 行 main、20,000–49,999 行 worker+Workbook**（1.2 验收表、5.3 调度表、风险表等已同步修正）。4.8/4.9/4.10/7.2 的"现行源码"快照已整体刷新为当前实现：streaming-builder 薄委托 fast-xlsx（快照含完整 fast-xlsx.ts）；worker `onerror` 对坏实例 terminate 后重建、仅 reject 该实例的请求，并转发 onPhase（提交 12d47a4）；stream 路径不再要求 WASM（不支持 WebAssembly 的浏览器 ≥5 万行仍可正常导出）。4.1/4.2 快照补齐 fast-xlsx/table-export/echarts-export 与 fflate 运行时依赖。v2.5 及以前的推导过程与数据保留为历史记录，带【历史】标注。
 
+> 🔄 **v2.7（跨路径日期口径统一 + wasm-loader 错误恢复修复 + 快照补齐，2026-08-18）**：① **日期 UTC 口径统一**——`formatDateByPattern` 原用本地分量，与 Workbook 路径 `dateToSerial`（UTC 分量）相反，非 UTC 时区下同一输入跨 5 万行阈值（及降级前后）可相差一天（UTC+8 本地 0 点的 Date 在 Workbook 路径显示前一天，实测 serialToDate 为前一日 16:00）。现改用 UTC 分量，三路径（Workbook/Stream/SheetJS）在任何时区输出一致；输入契约（ISO 字符串/`Date.UTC` 优先）已写入 `types.ts` JSDoc 与文档站。② **wasm-loader error 态修复**——原实现仅 `wasmUrl` 变化才重置 error 态，错误信息建议的「call configureWasm() to retry」实际不可行；现任何 `configureWasm` 调用都会清除 error 态并按新配置重试（ready/loading 态不受影响）。③ **stream 进度去重**——`exportFastXlsx` 不再自行上报最终 `onProgress(1)`，由 `exportExcel` 统一收尾，stream 路径不再出现两次 1。④ **快照补齐**——4.4/4.5/4.6/4.7/4.8(fast-xlsx)/4.11/4.12/4.13 的嵌入源码整体替换为现行实现（4.5 旧块无代码围栏且 JSDoc 标记损坏，一并修复）；4.2 两处与快照矛盾的文字、4.5 的 Node 初始化建议（改 `initWasmSync`）、1.2/7.3 的旧 StreamingXlsxWriter 成本模型残留、7.1 测试表均已对齐现状。
+
 > 🚨🚨🚨 **v2.0 评审修正（基于二次独立实测 + 源码核对，修正 v1.9 遗留的错误数字、内部矛盾与代码缺陷）**
 >
 > v1.9 用独立进程实测发现了 toBuffer 塌方（方向正确，已二次复现确认），但 v1.9 自身遗留三类问题：(A) 几个被夸大/记串的数字；(B) 文档内部前后矛盾（5.3 调度表是 v1.8 残留、4.9 format 两段自相矛盾）；(C) 代码缺陷（format 联合类型调用会运行时崩溃）。v2.0 逐一修正，并将性能验收口径对齐**真实可达水平**（原 5万<500ms / 10万<1000ms 的硬指标经实测证明在 modern-xlsx 下结构性不可达，见 1.2 说明）。
@@ -79,7 +81,7 @@
 
 > ¹ **此列是 Workbook 路径（auto 下 ≤49,999 行）的列数缩放预算**，实测基准点为 5 万行（648ms，见下方实测表）。注意 auto 模式下恰好 50000 行已切 stream（`STREAM_THRESHOLD=50_000`，分支 `>=`），Workbook 的 auto 实际适用范围为 ≤49,999 行；此处的"5 万行预算"是 Workbook 路径的性能外推参考，不表示 auto 模式 50000 行走 Workbook。
 
-> **stream 路径（≥5 万行）的列数缩放不适用线性模型**：stream 耗时 = writeRow 循环（JS 层逐行构造 `StreamingCellInput[]`，与列数线性相关）+ `finish()`（WASM ZIP + shared strings 写入，实测 ~90ms，与行列数弱相关）。列数增加主要抬高 writeRow 的 JS 开销。stream 路径的列数预算以浏览器环境实测为准（7.3 Playwright 方案为未来计划，当前未实现）。
+> **stream 路径（≥5 万行）的列数缩放不适用线性模型**（v2.7 注：现行 fast-xlsx 的成本模型如下；旧文按已退役的 StreamingXlsxWriter 描述为「writeRow 循环 + `finish()`（WASM ZIP）」，该实现自 v2.5 起不再使用）：stream 耗时 = 逐单元格 `displayValue` 格式化 + worksheet XML 字符串拼接（与**单元格数**线性相关）+ fflate 同步压缩（与数据量弱相关的常数开销）。列数增加线性抬高前两步的 JS 开销。stream 路径的列数预算以浏览器环境实测为准（7.3 Playwright 方案为未来计划，当前未实现）。
 
 **实测数据对照（v2.0 二次实测，modern-xlsx@1.2.0，Node v22.22.2，4 列混合类型，独立进程首次，每组 3–6 次取中位）**：
 
@@ -649,6 +651,7 @@ packages/excel-exporter/
 │       ├── phases.test.ts      # onPhase 阶段打点（init/build/download）
 │       ├── routing.test.ts     # pickMode 路由（main/worker/stream 阈值）
 │       ├── stream.test.ts      # exportAsStream 数据完整性
+│       ├── wasm-loader.test.ts # 加载器 error 态重试/重置（vi.mock，v2.7 新增）
 │       └── setup.ts            # Node WASM 引导（initWasmSync）+ makeData / fourCols
 ├── tsup.config.ts
 ├── tsconfig.json
@@ -738,12 +741,12 @@ packages/excel-exporter/
 
 **设计要点**：
 
-- **ESM-only（已核实）**：本包**不设 `main`/`require`/`.cjs` 产物**。原因：① tsup config（4.3）`format: ['esm']` 只产 ESM；② 核心依赖 `modern-xlsx` 的 `exports['.']` 只有 `import`/`default` 分段、**无 require**（已核实 `npm view modern-xlsx` 的 `exports` 字段），若本包产 CJS，消费方 `require('@marcusok/excel-exporter')` 会触发 `require('modern-xlsx')` 抛 Node `ERR_REQUIRE_ESM`。`exports` 每个入口只保留 `types` + `import` 两段；`package.json` 不设 `main`/`module`（ESM-only 包由 `exports.import` 解析，`main` 仅 CJS 兜底用，此处冗余且会误导）。
+- **ESM-only（已核实）**：本包**不设 `main`/`require`/`.cjs` 产物**。原因：① tsup config（4.3）`format: ['esm']` 只产 ESM；② 核心依赖 `modern-xlsx` 的 `exports['.']` 只有 `import`/`default` 分段、**无 require**（已核实 `npm view modern-xlsx` 的 `exports` 字段），若本包产 CJS，消费方 `require('@marcusok/excel-exporter')` 会触发 `require('modern-xlsx')` 抛 Node `ERR_REQUIRE_ESM`。`exports` 每个入口保留 `types` + `import` + `default` 三段（`default` 兜底指向同一 ESM 产物，见上方快照；v2.7 修正：旧文写「只保留 types + import 两段」与快照不符）；`package.json` 不设 `main`/`module`（ESM-only 包由 `exports.import` 解析，`main` 仅 CJS 兜底用，此处冗余且会误导）。
 - `modern-xlsx` **只**声明在 `peerDependencies`（不进 `dependencies`）：WASM 模块是进程级单例，如果两份 `modern-xlsx` 被解析（库自带一份 + 宿主一份），`initWasm()` 只初始化其中一份，另一份调用 WASM 方法会静默失败。peerDep 模式保证全局只有一份实例。代价：消费方需 `pnpm add @marcusok/excel-exporter modern-xlsx` 显式安装。
 - `xlsx`（SheetJS）作为 `optional` peerDependency：仅降级路径动态 `import('xlsx')`，不安装不影响主流程。`optionalDependencies` 会被 `pnpm install` 默认拉取（浪费体积），改走 peerDep + `peerDependenciesMeta.optional=true` 后消费方按需安装：`pnpm add xlsx`（仅需要降级保底时）。
 - `exports` 暴露三个库 API 入口 + 一个 Worker 脚本入口：① 主入口（`.`）；② 样式预设 `./styles`（按需 tree-shake）；③ `./worker-utils`（Worker 封装，入口名刻意避开 `./worker`，以免与 `modern-xlsx.worker.js` 这个 WASM Worker 脚本混淆）；④ `./dist/export.worker.js`（自包含 Worker 脚本，供消费方 `new Worker(url, {type:'module'})` 加载，见 4.3）。**入口名、4.3 的 tsup entry、消费方 import 三处必须一致**（早期版本 `package.json` 写成 `./worker`，与 tsup entry 不一致，已修正）。
 - `sideEffects: false`：让消费方的 bundler 能安全 tree-shake。
-- **devDependencies 留空**：子包不重复声明 `@types/node`（已在根 `package.json` 声明，pnpm workspace 子包通过符号链接继承）。子包自身的 dev 工具（如 `@vitest/...`）如需再用，遵循「谁用谁声明」原则。
+- **devDependencies 仅锁定本地开发/测试用的两个 peer**（`modern-xlsx: 1.2.0`、`xlsx: 0.18.5`，见上方快照）：子包不重复声明 `@types/node` 等构建工具（已在根 `package.json` 声明，pnpm workspace 子包通过符号链接继承）。子包自身的 dev 工具（如 `@vitest/...`）如需再用，遵循「谁用谁声明」原则。（v2.7 修正：旧文写「devDependencies 留空」与快照不符。）
 
 ### 4.3 `tsup.config.ts`（构建）
 
@@ -809,7 +812,7 @@ export default defineConfig([
 /**
  * Type definitions for @marcusok/excel-exporter.
  *
- * Colors use 6-digit RGB hex (e.g. 'FF0000'), matching modern-xlsx's
+ * Colors use 6-digit RGB hex (e.g. `'FF0000'`), matching modern-xlsx's
  * FontData.color / FillData.fgColor / BorderSideData.color (verified from
  * dist/validate-chart-D1O7LOfU.d.mts @ modern-xlsx 1.2.0).
  */
@@ -849,6 +852,14 @@ export interface CellStyle {
  * Worker-compatible, data-describing format spec. Functions cannot cross the
  * structured-clone boundary into a Web Worker, so worker/stream mode accepts
  * FormatSpec only. Function form works in `main` mode (browser <20,000 rows / Node).
+ *
+ * Date semantics: `date`/`datetime` interpret values by their **UTC
+ * components**. The workbook path serializes via modern-xlsx's `dateToSerial`
+ * (UTC wall clock) and the stream/SheetJS paths format the same UTC components
+ * into strings, so all paths agree in every timezone. Date-only ISO strings
+ * ("2025-01-05") parse as UTC midnight per ECMA-262; prefer them (or
+ * `Date.UTC(...)`) over locally-constructed Dates, whose UTC components can
+ * fall on the previous day in non-UTC timezones.
  */
 export type FormatSpec =
   | { type: "enum"; map: Record<string, string>; fallback?: string }
@@ -865,7 +876,18 @@ export interface ColumnConfig {
   width?: number;
   /** Style applied to all data cells in this column (not the header). */
   style?: CellStyle;
-  /** Value formatter: FormatSpec (worker-compatible) or function (main/Node only). */
+  /** Style applied to this column's header cell. Takes precedence over SheetConfig.headerStyle. */
+  headerStyle?: CellStyle;
+  /**
+   * Value formatter: FormatSpec (worker-compatible) or function (main/Node only).
+   *
+   * Cross-path precision: a `{ type: "number" }` spec without `decimals`
+   * defaults to 0, but only the stream path (>= STREAM_THRESHOLD, 50,000 rows)
+   * bakes `toFixed(0)` into the stored cell value. The Workbook path keeps full
+   * precision and renders decimals via numFormat, so the same spec can store
+   * `9999.99` (Workbook) vs `10000` (stream). Always set `decimals` explicitly
+   * for cross-threshold consistency (see docs/excel-export-design.md 4.8).
+   */
   format?:
     | FormatSpec
     | ((
@@ -887,6 +909,8 @@ export interface SheetConfig {
   name: string; // 1-31 chars, ECMA-376 validation
   columns: ColumnConfig[];
   data: Record<string, unknown>[];
+  /** Style applied to every header cell, unless overridden by ColumnConfig.headerStyle. */
+  headerStyle?: CellStyle;
   /** Number of header rows to freeze (usually 1). Maps to ws.frozenPane = { rows, cols: 0 }. */
   freezeRows?: number;
   /** Merged cell ranges. */
@@ -898,14 +922,43 @@ export interface SheetConfig {
 /** Export mode. */
 export type ExportMode = "auto" | "main" | "worker" | "stream";
 
+/**
+ * Named export stages, reported through `onPhase` as they complete. Phases are
+ * strictly sequential within one export call.
+ *
+ * - `"init"`: WASM initialization. Main-thread paths measure
+ *   `loader.ensureLoaded()`; worker mode measures the worker's `initWasm()`
+ *   (only reported when the worker actually re-initializes, not when its WASM
+ *   instance is already cached). Not reported by the SheetJS fallback (no WASM).
+ * - `"build"`: workbook construction. Covers the Workbook/stream builder, or
+ *   SheetJS's sheet building + write in the fallback path. A failed modern-xlsx
+ *   build followed by a SheetJS fallback reports two `"build"` phases, one per
+ *   actual build attempt.
+ * - `"download"`: the synchronous browser download trigger
+ *   (`triggerDownload`); only reported when `download !== false`. Not reported
+ *   in Node (no `document`).
+ */
+export type ExportPhase = "init" | "build" | "download";
+
 /** Export options. */
 export interface ExportOptions {
   sheets: SheetConfig[];
   filename: string;
   /** Mode selection: auto = auto-decide by row count (default). */
   mode?: ExportMode;
-  /** Progress callback (0-1); effective in worker/stream mode only. */
+  /**
+   * Progress callback (0-1). The stream path reports intermediate values every
+   * 1,000 rows; other paths report only the trailing pair 0 and 1. The final 1
+   * is emitted exactly once by `exportExcel` itself.
+   */
   onProgress?: (progress: number) => void;
+  /**
+   * Optional per-stage timing callback. Receives the phase name and its
+   * wall-clock duration in ms (0 means the phase did no work, e.g. WASM was
+   * already loaded). Useful for metrics/play panels; does not affect
+   * `ExportResult.duration` (which keeps measuring the whole export).
+   */
+  onPhase?: (phase: ExportPhase, durationMs: number) => void;
   /** Trigger browser download (default true). Set false to only return a Blob. */
   download?: boolean;
 }
@@ -938,6 +991,7 @@ export const DEFAULT_DATETIME_PATTERN = "yyyy-MM-dd HH:mm";
 export function toStr(value: unknown): string {
   if (value == null) return "";
   if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
   if (
     typeof value === "number" ||
     typeof value === "boolean" ||
@@ -1009,6 +1063,14 @@ export function numFormatForSpec(spec: FormatSpec): string | null {
  * Format a Date (or date-coercible value) into a display string using an
  * Excel-style pattern (tokens: yyyy MM dd HH mm ss). Used by the streaming
  * path, which has no numFormat support and must emit readable date strings.
+ *
+ * Uses the date's **UTC components** (not local ones), matching modern-xlsx's
+ * `dateToSerial` (the workbook path also derives the serial from UTC
+ * components). The same input therefore renders identically on the workbook,
+ * stream and SheetJS paths in every timezone. Note that date-only ISO strings
+ * ("2025-01-05") parse as UTC midnight per ECMA-262, while locally-constructed
+ * Dates (`new Date(2025, 0, 5)`) carry local wall time whose UTC components can
+ * fall on the previous day in non-UTC timezones.
  */
 export function formatDateByPattern(value: unknown, pattern: string): string {
   const d = toJsDate(value);
@@ -1020,12 +1082,12 @@ export function formatDateByPattern(value: unknown, pattern: string): string {
   // its predecessor so `yyyy-mm-dd`, `yyyy-MM-dd` and `HH:mm:ss` all match.
   const lower = pattern.toLowerCase();
   const parts = {
-    yyyy: String(d.getFullYear()),
-    month: pad(d.getMonth() + 1),
-    dd: pad(d.getDate()),
-    hh: pad(d.getHours()),
-    minute: pad(d.getMinutes()),
-    ss: pad(d.getSeconds()),
+    yyyy: String(d.getUTCFullYear()),
+    month: pad(d.getUTCMonth() + 1),
+    dd: pad(d.getUTCDate()),
+    hh: pad(d.getUTCHours()),
+    minute: pad(d.getUTCMinutes()),
+    ss: pad(d.getUTCSeconds()),
   };
   const TOKEN = /yyyy|mm|dd|hh|ss/g;
   const hits: { tok: string; idx: number }[] = [];
@@ -1134,135 +1196,144 @@ export function validateSheetName(name: string): void {
 
 设计要点：单例、幂等、超时重试、能力检测降级。`initWasm` 本身幂等（README 明确），但叠加超时与重试更稳健。
 
+**现行源码**（`wasm-loader.ts`，v2.7 重新围栏并替换为当前实现；旧块曾无代码围栏且 JSDoc 标记损坏）：
+
+```ts
 import { initWasm } from "modern-xlsx";
 
 export type LoadState = "idle" | "loading" | "ready" | "error";
 
 export interface LoaderOptions {
-/** Self-hosted WASM URL. Strongly recommended in production to avoid CDN drift. _/
-wasmUrl?: string | URL;
-/_* Self-hosted export.worker.js URL, required for worker mode. _/
-workerUrl?: string | URL;
-/_* Per-attempt load timeout, default 10s. _/
-timeoutMs?: number;
-/_* Max retries, default 3. */
-maxRetries?: number;
+  /** Self-hosted WASM URL. Strongly recommended in production to avoid CDN drift. */
+  wasmUrl?: string | URL;
+  /** Self-hosted export.worker.js URL, required for worker mode. */
+  workerUrl?: string | URL;
+  /** Per-attempt load timeout, default 10s. */
+  timeoutMs?: number;
+  /** Max retries, default 3. */
+  maxRetries?: number;
 }
 
-class WasmLoader {
-private state: LoadState = "idle";
-private promise: Promise<void> | null = null;
-private opts: LoaderOptions;
+export class WasmLoader {
+  private state: LoadState = "idle";
+  private promise: Promise<void> | null = null;
+  private opts: LoaderOptions;
 
-constructor(opts: LoaderOptions = {}) {
-this.opts = { timeoutMs: 10_000, maxRetries: 3, ...opts };
-}
+  constructor(opts: LoaderOptions = {}) {
+    this.opts = { timeoutMs: 10_000, maxRetries: 3, ...opts };
+  }
 
-get supported(): boolean {
-return (
-typeof WebAssembly !== "undefined" &&
-typeof WebAssembly.instantiate === "function"
-);
-}
+  get supported(): boolean {
+    return (
+      typeof WebAssembly !== "undefined" &&
+      typeof WebAssembly.instantiate === "function"
+    );
+  }
 
-get isReady(): boolean {
-return this.state === "ready";
-}
+  get isReady(): boolean {
+    return this.state === "ready";
+  }
 
-getOptions(): Readonly<LoaderOptions> {
-return this.opts;
-}
+  getOptions(): Readonly<LoaderOptions> {
+    return this.opts;
+  }
 
-/**
-
-- Merge new options into the current set. If the WASM URL changes while the
-- loader is already ready (or mid-load), reset so the next ensureLoaded
-- re-initializes from the new URL; otherwise keep the loaded state. This avoids
-- discarding an already-loaded WASM module when only timeouts/retries change.
-  */
+  /**
+   * Merge new options into the current set. If the WASM URL changes while the
+   * loader is already ready (or mid-load), reset so the next ensureLoaded
+   * re-initializes from the new URL; otherwise keep the loaded state. This avoids
+   * discarding an already-loaded WASM module when only timeouts/retries change.
+   * A previous load *error* is always cleared by a reconfiguration, so the next
+   * ensureLoaded retries with the new settings instead of throwing forever.
+   */
   updateOptions(opts: LoaderOptions): void {
-  const urlChanged =
-  opts.wasmUrl !== undefined && opts.wasmUrl !== this.opts.wasmUrl;
-  this.opts = { ...this.opts, ...opts };
-  if (urlChanged && this.state !== "idle") {
-  this.state = "idle";
-  this.promise = null;
-  }
+    const urlChanged =
+      opts.wasmUrl !== undefined && opts.wasmUrl !== this.opts.wasmUrl;
+    this.opts = { ...this.opts, ...opts };
+    if ((urlChanged && this.state !== "idle") || this.state === "error") {
+      this.state = "idle";
+      this.promise = null;
+    }
   }
 
-async ensureLoaded(): Promise<void> {
-if (this.state === "ready") return;
-if (this.state === "error") {
-throw new Error(
-"[excel-exporter] WASM load previously failed; call configureWasm() to retry with new settings",
-);
-}
-if (this.promise) return this.promise;
-this.promise = this.loadWithRetry();
-try {
-await this.promise;
-this.state = "ready";
-} catch (e) {
-this.state = "error";
-throw e;
-}
-}
+  async ensureLoaded(): Promise<void> {
+    if (this.state === "ready") return;
+    if (this.state === "error") {
+      throw new Error(
+        "[excel-exporter] WASM load previously failed; call configureWasm() to retry with new settings",
+      );
+    }
+    if (this.promise) return this.promise;
+    // Capture the promise locally: updateOptions() may null this.promise while
+    // the load is in flight (wasmUrl changed), and this load must not clobber
+    // the reset state when it settles -- otherwise a superseded old-URL load
+    // would mark the loader ready and the new URL would never take effect.
+    const promise = (this.promise = this.loadWithRetry());
+    try {
+      await promise;
+      if (this.promise === promise) this.state = "ready";
+    } catch (e) {
+      if (this.promise === promise) this.state = "error";
+      throw e;
+    }
+  }
 
-private async loadWithRetry(): Promise<void> {
-if (!this.supported) {
-throw new Error(
-"[excel-exporter] WebAssembly not supported in this environment",
-);
-}
-const wasmUrl = this.opts.wasmUrl;
-const timeoutMs = this.opts.timeoutMs ?? 10_000;
-const maxRetries = this.opts.maxRetries ?? 3;
-let lastErr: unknown;
-for (let attempt = 1; attempt <= maxRetries; attempt++) {
-let timer: ReturnType<typeof setTimeout> | undefined;
-const timeout = new Promise<never>((_, reject) => {
-timer = setTimeout(
-() => reject(new Error(`WASM load timeout (attempt ${attempt})`)),
-timeoutMs,
-);
-});
-try {
-this.state = "loading";
-await Promise.race([initWasm(wasmUrl), timeout]);
-return;
-} catch (e) {
-lastErr = e;
-if (attempt < maxRetries) {
-await new Promise((r) => setTimeout(r, 300 * 2 ** (attempt - 1)));
-}
-} finally {
-// Clear the pending timeout so a late reject never surfaces as an
-// unhandled promise rejection after initWasm already resolved.
-if (timer) clearTimeout(timer);
-}
-}
-throw new Error(
-`[excel-exporter] WASM load failed after ${maxRetries} attempts: ${(lastErr as Error).message}`,
-);
-}
+  private async loadWithRetry(): Promise<void> {
+    if (!this.supported) {
+      throw new Error(
+        "[excel-exporter] WebAssembly not supported in this environment",
+      );
+    }
+    const wasmUrl = this.opts.wasmUrl;
+    const timeoutMs = this.opts.timeoutMs ?? 10_000;
+    const maxRetries = this.opts.maxRetries ?? 3;
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`WASM load timeout (attempt ${attempt})`)),
+          timeoutMs,
+        );
+      });
+      try {
+        this.state = "loading";
+        await Promise.race([initWasm(wasmUrl), timeout]);
+        return;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, 300 * 2 ** (attempt - 1)));
+        }
+      } finally {
+        // Clear the pending timeout so a late reject never surfaces as an
+        // unhandled promise rejection after initWasm already resolved.
+        if (timer) clearTimeout(timer);
+      }
+    }
+    throw new Error(
+      `[excel-exporter] WASM load failed after ${maxRetries} attempts: ${(lastErr as Error).message}`,
+    );
+  }
 }
 
 const defaultLoader: WasmLoader = new WasmLoader();
 
 export function getWasmLoader(): WasmLoader {
-return defaultLoader;
+  return defaultLoader;
 }
 
 /**
-
-- Inject CDN / self-hosted URLs and timeout config at app entry. Merges into the
-- existing loader rather than replacing it, so an already-loaded WASM module is
-- kept unless the WASM URL actually changes (in which case the next ensureLoaded
-- re-initializes from the new URL).
-  */
-  export function configureWasm(opts: LoaderOptions): void {
+ * Inject CDN / self-hosted URLs and timeout config at app entry. Merges into the
+ * existing loader rather than replacing it, so an already-loaded WASM module is
+ * kept unless the WASM URL actually changes (in which case the next ensureLoaded
+ * re-initializes from the new URL). A previous load error is always cleared, so
+ * calling this after a failure makes the next export retry with the new settings.
+ */
+export function configureWasm(opts: LoaderOptions): void {
   defaultLoader.updateOptions(opts);
-  }
+}
+```
 
 > **为什么不用 modern-xlsx 官方的 `ensureReady()`？**（已核实源码）官方提供 `ensureReady(wasmSource?)`，内部即「若未初始化则调 `initWasm`」，等价于「首次使用自动初始化」。本库**没有**直接用它的原因：
 >
@@ -1270,7 +1341,7 @@ return defaultLoader;
 > - 官方 `detectWasmUrl()` 只覆盖浏览器 `<script>` 场景（源码：仅 `document.currentScript` 分支），Node 下返回 `undefined`，靠 wasm-bindgen 默认 `init` 兜底；本库通过 `configureWasm({ wasmUrl })` 让生产环境显式指定自托管 URL，行为可预期。
 > - `WasmLoader` 还承载 `workerUrl` 配置（Worker 模式需要），这是官方 `ensureReady` 不涉及的。
 >
-> 注意：modern-xlsx 的 `initWasm` 注释声称「auto-detects: script src, import.meta.url, or CDN fallback」，但**源码只实现了 script src 一种**（import.meta.url / CDN fallback 实际靠 wasm-bindgen 默认 init 兜底，非显式支持）。因此 Node 测试环境（7.2）建议在 `beforeAll` 里显式 `configureWasm({ wasmUrl: <解包后的 .wasm 绝对路径> })`，不要依赖自动探测。
+> 注意：modern-xlsx 的 `initWasm` 注释声称「auto-detects: script src, import.meta.url, or CDN fallback」，但**源码只实现了 script src 一种**（import.meta.url / CDN fallback 实际靠 wasm-bindgen 默认 init 兜底，非显式支持）。因此 Node 测试环境（7.2）**不能依赖自动探测，也不能传本地文件路径**——Node 的 undici fetch 拒绝 `file://` 协议，`initWasm(<本地路径>)` 会 fetch failed。正确做法（现行 `__tests__/setup.ts` 即此实现，已实测）：`initWasmSync(readFileSync(require.resolve 路径下的 .wasm))` 同步引导；或 `configureWasm({ wasmUrl })` 指向一个可 fetch 的 HTTP URL。（v2.1 历史：旧文此处建议 `configureWasm({ wasmUrl: <绝对路径> })`，与 7.2/setup.ts 实测结论矛盾，v2.7 纠正。）
 
 ### 4.6 样式工具（`style-utils.ts`）
 
@@ -1281,13 +1352,11 @@ import type { Workbook } from "modern-xlsx";
 import type { CellStyle } from "./types";
 
 /**
- * 把业务样式编译为 modern-xlsx 的 styleIndex。
- * 返回值写入 ws.cell('A1').styleIndex = idx。
+ * Compile a business CellStyle into a modern-xlsx styleIndex (0-based index into
+ * the workbook's cellXfs table). StyleBuilder chain methods mutate in place and
+ * return `this` (verified in modern-xlsx 1.2.0 source), so direct calls suffice.
  */
 export function buildStyleIndex(wb: Workbook, style: CellStyle): number {
-  // StyleBuilder 所有链式方法返回 this 且原地修改内部字段（已核实源码：
-  // font(){ Object.assign(this.fontData, opts); return this; }），因此无需
-  // 「builder = builder.xxx()」重新赋值，直接 builder.xxx() 即可生效。
   const builder = wb.createStyle();
 
   if (style.font) {
@@ -1301,7 +1370,7 @@ export function buildStyleIndex(wb: Workbook, style: CellStyle): number {
     });
   }
 
-  if (style.fill?.fgColor || style.fill?.bgColor) {
+  if (style.fill && (style.fill.fgColor || style.fill.bgColor)) {
     builder.fill({
       pattern: style.fill.pattern ?? "solid",
       fgColor: style.fill.fgColor ?? null,
@@ -1407,10 +1476,21 @@ export class WorkbookBuilder {
       if (c.width !== undefined) ws.setColumnWidth(i + 1, c.width);
     });
 
-    // Column styles: apply to data cells only (header stays unstyled, matching
-    // the `style: not the header` contract in types.ts). ws.rows[0] is the
-    // header row, so slice(1) iterates only data rows; mutating styleIndex is
-    // a plain JS property write, bypassing ws.cell(ref) ref-parsing overhead.
+    // Header styles. Column-level headerStyle wins over the sheet-level default.
+    config.columns.forEach((c, i) => {
+      const headerStyle = c.headerStyle ?? config.headerStyle;
+      if (headerStyle) {
+        const idx = buildStyleIndex(this.wb, headerStyle);
+        const cell = ws.rows[0]?.cells[i];
+        if (cell) cell.styleIndex = idx;
+      }
+    });
+
+    // Column styles: apply to data cells only, matching the `style: not the
+    // header` contract in types.ts. Header styling is handled separately above
+    // via headerStyle. ws.rows[0] is the header row, so slice(1) iterates only
+    // data rows; mutating styleIndex is a plain JS property write, bypassing
+    // ws.cell(ref) ref-parsing overhead.
     config.columns.forEach((c, i) => {
       if (c.style) {
         const idx = buildStyleIndex(this.wb, c.style);
@@ -1785,7 +1865,9 @@ export function exportFastXlsx(
   }
 
   const bytes = zipSync(files, { level: 1 });
-  onProgress?.(1);
+  // No trailing onProgress(1) here: every 1,000-row checkpoint reports the
+  // final position, and exportExcel emits the single terminal 1 for all paths
+  // (emitting it here too duplicated the last callback on stream routes).
   return { bytes, rowCount: processed.count };
 }
 ```
@@ -2436,46 +2518,44 @@ export async function exportEcharts(
 import type { CellStyle } from "./types";
 
 export const StylePresets = {
-  /** 表头：加粗、深蓝底、白字、居中 */
+  /** Header: bold, dark-blue fill, white text, centered. */
   header: {
     font: { bold: true, size: 12, color: "FFFFFF" },
     fill: { pattern: "solid", fgColor: "1F4E79" },
     alignment: { horizontal: "center", vertical: "center" },
   } satisfies CellStyle,
 
-  /** 金额：千分位两位小数，右对齐 */
+  /** Currency: thousands separator, 2 decimals, right-aligned. */
   currency: {
     numFormat: "#,##0.00",
     alignment: { horizontal: "right" },
   } satisfies CellStyle,
 
-  /** 百分比 */
+  /** Percentage. */
   percent: {
     numFormat: "0.00%",
     alignment: { horizontal: "right" },
   } satisfies CellStyle,
 
-  /** 日期：YYYY-MM-DD，居中 */
+  /** Date: YYYY-MM-DD, centered. */
   date: {
     numFormat: "yyyy-MM-dd",
     alignment: { horizontal: "center" },
   } satisfies CellStyle,
 
-  /** 日期时间：YYYY-MM-DD HH:MM */
+  /** Datetime: YYYY-MM-DD HH:MM. */
   datetime: {
     numFormat: "yyyy-MM-dd HH:mm",
     alignment: { horizontal: "center" },
   } satisfies CellStyle,
 
-  /** 数据行：左对齐、细底边框（斑马线效果可在调用方按行下标切换） */
+  /** Data row: left-aligned, thin bottom border. */
   dataRow: {
     alignment: { horizontal: "left", vertical: "center" },
-    border: {
-      bottom: { style: "thin", color: "D0D0D0" },
-    },
+    border: { bottom: { style: "thin", color: "D0D0D0" } },
   } satisfies CellStyle,
 
-  /** 警示红字 */
+  /** Danger: bold red text, centered. */
   danger: {
     font: { color: "C00000", bold: true },
     alignment: { horizontal: "center" },
@@ -2544,6 +2624,9 @@ export async function exportWithSheetJS(
     `[excel-exporter] Falling back to SheetJS (styles stripped). Reason: ${reason}`,
   );
   try {
+    // Build phase includes the lazy SheetJS load (local module or CDN), which
+    // is the dominant cost of this path when WASM is unavailable.
+    const buildStart = performance.now();
     const XLSX = await loadSheetJS();
     const wb = XLSX.utils.book_new();
     for (const s of options.sheets) {
@@ -2559,7 +2642,14 @@ export async function exportWithSheetJS(
     }
     const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
     const blob = new Blob([out], { type: XLSX_MIME });
-    if (options.download !== false) triggerDownload(blob, options.filename);
+    options.onPhase?.("build", performance.now() - buildStart);
+    // Node has no document: no download happens, so the phase is not reported
+    // (matches the ExportPhase contract in types.ts).
+    if (options.download !== false && typeof document !== "undefined") {
+      const downloadStart = performance.now();
+      triggerDownload(blob, options.filename);
+      options.onPhase?.("download", performance.now() - downloadStart);
+    }
     const totalRows = options.sheets.reduce((s, sh) => s + sh.data.length, 0);
     return {
       success: true,
@@ -2592,7 +2682,7 @@ export async function exportWithSheetJS(
 ### 4.13 下载工具（`download.ts`）
 
 ```ts
-/** 触发浏览器下载。Node 环境（document 未定义）下 no-op。 */
+/** Trigger a browser download from a Blob. No-op in Node (document undefined). */
 export function triggerDownload(blob: Blob, filename: string): void {
   if (typeof document === "undefined") return;
   const url = URL.createObjectURL(blob);
@@ -2606,10 +2696,10 @@ export function triggerDownload(blob: Blob, filename: string): void {
 }
 
 /**
- * 把 Uint8Array 强转为 BlobPart。TS 5.7 把 Uint8Array 放宽为
- * ArrayBufferLike（含 SharedArrayBuffer）的泛型，与 BlobPart 期望的
- * ArrayBufferView<ArrayBuffer> 不兼容；运行时任意 Uint8Array 都是合法
- * BlobPart，此 cast 是官方文档记载的变通写法（WorkbookBuilder/streaming-builder/index 均用）。
+ * Coerce a Uint8Array into a BlobPart. TS 5.7+ widened Uint8Array to a generic
+ * over ArrayBufferLike (which includes SharedArrayBuffer), making it incompatible
+ * with BlobPart's ArrayBufferView<ArrayBuffer>. At runtime any Uint8Array is a
+ * valid BlobPart; this cast is the documented workaround.
  */
 export function toBlobPart(bytes: Uint8Array): BlobPart {
   return bytes as unknown as BlobPart;
@@ -2890,12 +2980,16 @@ await exportExcel({
 
 ### 7.1 单元测试（Vitest）
 
-| 模块               | 重点                                              |
-| ------------------ | ------------------------------------------------- |
-| `style-utils`      | 各样式字段正确映射到 StyleBuilder；缺省字段不报错 |
-| `wasm-loader`      | 幂等、超时重试、不支持环境抛错                    |
-| `workbook-builder` | aoa 批量写入结果正确（行列、表头、冻结、合并）    |
-| `fallback`         | SheetJS 路径产出可被 `XLSX.read` 解析             |
+（v2.7 注：下表按现行 `src/__tests__/` 实际文件对齐；旧表列有 `style-utils` 行但仓库并无该测试文件，`fallback` 行的「可被 XLSX.read 解析」也非实际断言。）
+
+| 测试文件                                      | 重点                                                                                                                |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `format.test.ts`                              | applyFormat/displayValue/FormatSpec 各类型；日期 UTC 口径跨路径一致（v2.7 新增）                                    |
+| `wasm-loader.test.ts`                         | error 态下任意 `configureWasm` 可重试、URL 变更重初始化、同 URL 不重复初始化（vi.mock 注入 modern-xlsx，v2.7 新增） |
+| `builder.test.ts`                             | aoa 批量写入结果正确（行列、表头、样式、冻结、合并、headerStyle）                                                   |
+| `stream.test.ts`                              | fast-xlsx 数据完整性、日期 pattern 字符串（UTC 口径）                                                               |
+| `fallback.test.ts`                            | SheetJS 降级产出非空 Blob、`engine: "sheetjs"`、多 sheet rowCount                                                   |
+| `adapters/routing/phases/performance.test.ts` | table/echarts 适配器、pickMode 路由阈值、onPhase 阶段序列、性能基准                                                 |
 
 ### 7.2 性能基准测试（关键验收）
 
@@ -3078,7 +3172,8 @@ test("worker-mode 10万行 × 4列: 端到端 < 2000ms 且无 longtask (4列基�
   // 此 case 对应 1.2 表的最紧验收点。附录 A 自评余量仅 1.3-2.2x，
   // 若逼近上限，按附录 A 优化方向（减 format 开销 / 预分配 styleIndex / stream 阈值下调）。
   // 注意：100k 带样式走 worker（pickMode 见 4.10）；100k 无样式走 stream，stream 路径
-  // 主线程天然不阻塞（逐行写入在 WASM），但端到端耗时仍在此验收。
+  // 主线程天然不阻塞（v2.7 注：浏览器下 fast-xlsx 在 Worker 内执行——旧文「逐行写入在 WASM」
+  // 是已退役的 StreamingXlsxWriter 模型，现行 fast-xlsx 不依赖 WASM），但端到端耗时仍在此验收。
   await page.goto("/demo");
   await page.evaluate(() => {
     (window as any).__longTasks = 0;
@@ -3285,6 +3380,12 @@ const blob = new Blob([bytes], {
 
 ### 修订历史
 
+- **v2.7（跨路径日期口径统一 + wasm-loader 错误恢复修复 + 快照补齐，2026-08-18）**：
+  - **P0 · 日期跨路径口径不一致（代码修复 + 实测确认）**：Workbook 路径 `applyFormat` date/datetime 走 modern-xlsx `dateToSerial`（内部 `toUtcMs` 取 **UTC 分量**，已核实 dist 源码），而 Stream/SheetJS 路径 `formatDateByPattern` 原取**本地分量**——同一输入两条路径显示可差一天（实测：UTC+8 下 `new Date(2025,0,5)` 本地 0 点经 Workbook 路径 serial=45661.6667，Excel 显示 2025-01-04；Stream 路径显示 2025-01-05）。既有测试未暴露的原因：round-trip 断言两端都走 UTC 约定，且测试机时区（UTC+8）下测试数据（14:30 / ISO 字符串）恰好不跨日。修复：`formatDateByPattern` 改用 `getUTC*` 分量；相关测试改 UTC 构造（断言与运行时区无关）并新增跨路径一致性回归用例；输入契约写入 `types.ts` JSDoc 与文档站（zh/en）。
+  - **P1 · wasm-loader error 态粘滞（代码修复）**：`updateOptions` 原仅在 `wasmUrl` 变化时重置状态，加载失败（error）后按错误信息建议调 `configureWasm({timeoutMs:...})`（URL 不变）不会重试，后续 `ensureLoaded` 永远抛旧错误直接降级 SheetJS。修复：error 态下任何 `configureWasm` 调用都重置为 idle 重试（ready/loading 态语义不变）。新增 `wasm-loader.test.ts`（vi.mock 注入 modern-xlsx，隔离真实 initWasm 幂等性），并导出 `WasmLoader` 类供测试（不进包公开 API）。
+  - **P2 · stream 进度重复上报（代码修复）**：`exportFastXlsx` 尾部与 `exportExcel` 各上报一次 `onProgress(1)`，stream/worker 路径末尾出现两次 1。修复：`exportFastXlsx` 不再自行收尾，由 `exportExcel` 统一上报（对 exportExcel 调用方行为不变：0 → 分段 → 1 各一次）。
+  - **快照与残留清理**：4.4（types.ts 旧快照缺 `headerStyle`×2/`ExportPhase`/`onPhase`；format-utils 旧快照缺 `toStr` 的 Date→ISO 分支）、4.5（旧块无代码围栏、JSDoc 标记 `/_*`/`_/` 损坏；尾注建议的 `configureWasm({wasmUrl:<本地路径>})` 与 setup.ts 实测矛盾，改为 `initWasmSync(readFileSync(...))`）、4.7（旧快照缺 headerStyle 应用块）、4.12（旧快照缺 onPhase 上报）、4.6/4.11/4.13（注释/引号风格旧版）整体替换为现行源码，替换后经脚本 diff 校验逐字一致；4.2 两处与快照矛盾的文字（「exports 只保留 types+import 两段」「devDependencies 留空」）、1.2/7.3 的旧 StreamingXlsxWriter 成本模型残留（writeRow/finish/WASM ZIP/「逐行写入在 WASM」）、7.1 测试表（旧表含不存在的 style-utils 测试与未实际断言的 XLSX.read）均已按现状修正。
+  - **文档站同步**：guide/04-formatting 与 api/03-format-spec（zh/en）补日期 UTC 约定；guide/02-installation（zh/en）修正 `configureWasm` 合并语义（error 态清除）。play/registry 注释修正（「静默降级」→ 有警告；durationMs 注释；wasm 改名理由）。
 - **v2.6（源码再对齐，2026-08-17）**：
   - **WORKER_THRESHOLD 500 → 20,000 全文修正（P0）**：提交 0c0fbd5 将 `src/index.ts` 的 Worker 阈值从 500 调回 20,000，但正文（1.2 验收表与阻塞预算、4.10 pickMode 快照与 v2.2 注、5.2 策略、5.3 调度表与阈值注、6.3 format 适用场景、7.2 测什么说明、风险表、附录 G）仍按 500 口径陈述，已逐处修正并注明 v2.6；修订历史中 v1.8/v2.1/v2.4 条目对 500 的记载保留为历史记录。
   - **4.8/4.9/4.10/7.2 代码快照整体刷新**：streaming-builder.ts（薄委托）、fast-xlsx.ts（全量）、worker-exporter.ts、workers/export.worker.ts、index.ts、performance.test.ts 快照替换为现行源码，均与仓库文件 diff 校验一致。旧 StreamingXlsxWriter 实现块加【历史】标注保留。
