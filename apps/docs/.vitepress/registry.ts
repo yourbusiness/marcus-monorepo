@@ -187,8 +187,8 @@ export const packages: PackageEntry[] = [
     status: "stable",
     en: true,
     tagline: {
-      zh: "高性能 Excel 导出引擎",
-      en: "High-performance Excel export engine",
+      zh: "Excel 导出引擎（WASM + Fast stream，10 万行约 0.8s）",
+      en: "Excel export engine (WASM + Fast stream, ~0.8s at 100k rows)",
     },
     keywords: ["excel", "xlsx", "export", "wasm"],
     runtimeAssets: [

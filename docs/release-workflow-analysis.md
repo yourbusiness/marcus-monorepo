@@ -14,7 +14,7 @@ CI 文档讲的是"怎么保证代码质量"。这篇讲的是**另一件事：�
 - CI 是"交稿前的校对机器"。
 - **Release 是"印刷厂 + 发行商"**：它自动把你的书印好（构建），贴上版本号，然后摆到书店（npm）的货架上，让全世界的人都能 `npm install` 买走。
 
-这个项目要发布的"书"，就是那个 Excel 导出库 `@marcusok/excel-exporter`（当前版本 `1.0.3`，见 [packages/excel-exporter/package.json](../packages/excel-exporter/package.json)）。
+这个项目要发布的"书"，就是那个 Excel 导出库 `@marcusok/excel-exporter`（版本号见 [packages/excel-exporter/package.json](../packages/excel-exporter/package.json)，会随发版不断变化，本文不写死）。
 
 而且这事不是手动点的，是**全自动**的——只要你把代码合并到 main 分支，机器就会自己决定"要不要发新版本、发哪个版本"，你睡着了它也在发。
 

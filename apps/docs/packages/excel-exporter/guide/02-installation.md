@@ -2,7 +2,7 @@
 
 ## 环境要求
 
-- Node `>= 22`、pnpm `>= 9`
+- Node `>= 22`（包的 `engines` 要求）；包管理器不限，本文示例命令用 pnpm，npm / yarn 等价
 - 浏览器需要支持 WebAssembly（现代浏览器均支持）
 - 依赖：`modern-xlsx@^1.2.0` 为必装 peerDependency；`xlsx`（SheetJS）为可选兜底依赖
 
@@ -87,4 +87,4 @@ configureWasm({
 
 ## Node / SSR
 
-Node 环境无需部署浏览器静态资源，但**本地运行时需要先初始化 WASM**：自动探测得到的 `file://` 地址无法被 Node 的 fetch 加载，若不引导会静默降级到无样式的 SheetJS 兜底。做法是在入口先 `initWasmSync(readFileSync(...))`（见 [Node/SSR](/packages/excel-exporter/guide/09-node-ssr) 的完整示例），或通过 `configureWasm({ wasmUrl })` 指定一个可 fetch 的 HTTP 地址。`auto` 模式下 Node 不会走 Worker，而是主线程执行；≥ 5 万行自动切换流式路径（流式路径不依赖 WASM）。
+Node 环境无需部署浏览器静态资源，但**本地运行时需要先初始化 WASM**：自动探测得到的 `file://` 地址无法被 Node 的 fetch 加载，若不引导会自动降级到无样式的 SheetJS 兜底（console 会打印 `[excel-exporter]` 前缀的警告）。做法是在入口先 `initWasmSync(readFileSync(...))`（见 [Node/SSR](/packages/excel-exporter/guide/09-node-ssr) 的完整示例），或通过 `configureWasm({ wasmUrl })` 指定一个可 fetch 的 HTTP 地址。`auto` 模式下 Node 不会走 Worker，而是主线程执行；≥ 5 万行自动切换流式路径（流式路径不依赖 WASM）。

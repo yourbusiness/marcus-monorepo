@@ -251,8 +251,12 @@ config.json 里 `commit: false` 不是「不提交版本改动」，而是「`ch
 
 ---
 
-## 9. 当前仓库状态快照（2026-08-17，1.0.3 发布后）
+## 9. 如何确认仓库当前的发版状态
 
-- `.changeset/` 下只有 `config.json`，无待消费的 changeset 文件 → 处于「干净」状态，没有待发版本。
-- `packages/excel-exporter/package.json` 版本 `1.0.3`，CHANGELOG 最新到 `1.0.3`，npm 上也是 `1.0.3` → 本地与线上一致，没有超前。
-- 这意味着如果现在直接 push 一次代码（不带 changeset），release.yml 走 publish 分支，`changeset publish` 发现版本一致，no-op，不会发任何东西。这是正常的安全行为。
+静态快照总会过时，建议直接用下面几条命令亲眼看：
+
+- `ls .changeset/` —— 只有 `config.json` 就是「干净」状态，没有待发版本；还有其它 `.md` 文件就是有待消费的 changeset，合并进 main 后会触发 version 流程。
+- `node -p "require('./packages/excel-exporter/package.json').version"` —— 本地版本号。
+- `npm view @marcusok/excel-exporter version` —— npm 线上版本号。两者一致说明没有超前；本地更新说明有版本待 publish。
+
+举例（2026-08-17 核实过的实际状态）：当时 `.changeset/` 干净、本地与 npm 同为 `1.0.3` → 那时直接 push 一次不带 changeset 的代码，release.yml 走 publish 分支，`changeset publish` 发现版本一致，no-op，不会发任何东西。这是正常的安全行为。

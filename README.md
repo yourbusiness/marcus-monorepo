@@ -42,11 +42,11 @@ marcus-monorepo/
 │   └── docs/                   # VitePress 公开文档站（中英双语，GitHub Pages）
 ├── packages/                   # 共享包（水平扩展）
 │   ├── excel-exporter/         # 当前：Excel 导出
-│   │   ├── src/                # 24 个 .ts 文件（15 个源文件 + 9 个测试文件）
+│   │   ├── src/                # 源码（含 workers/ 入口）与 __tests__/ 测试
 │   │   └── dist/               # tsup 构建产物
 │   └── play/                   # 本地联调沙箱（React 19 + antd 6，private 包）
 ├── docs/                       # 设计文档
-│   └── excel-export-design.md  # Excel 导出核心设计文档（约 16 万字符）
+│   └── excel-export-design.md  # Excel 导出核心设计文档（约 17 万字符）
 ├── scripts/                    # 仓库级脚本（dev.mjs 统一 dev 启动器）
 ├── .changeset/                 # Changesets 配置
 ├── .github/workflows/          # CI/CD

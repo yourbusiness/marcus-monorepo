@@ -3364,7 +3364,7 @@ const blob = new Blob([bytes], {
 
 ### 附录 F · Node 版本与补充依赖（v2.1 重写）
 
-> **本仓库用 Node 22，不升级到 24**：`@marcusok/excel-exporter` 与 monorepo 根的 `engines.node` 均为 `>=22.0.0`，`.nvmrc` 锁定 `22`，CI `node-version: 22`。核心依赖 modern-xlsx@1.2.0 的 `engines.node` 声明为 `>=24.0.0`，但其 WASM 核心面向浏览器、与 Node 版本无关；本仓库在 Node 22（v22.22.2）下 `lint/typecheck/test/build` 全绿（47 个用例实测通过；CI 以 `RUN_PERF=0` 跳过 4 个性能基准、实跑 43 个，v2.6 更新）。注意：modern-xlsx README 无 "Node Usage" 章节，其顶部声明要求 "Node.js 24+"，Node 22 可用性由本仓库测试实测而非 README 声明。`.npmrc` 设 `engine-strict=false`，避免 modern-xlsx 的 engines 声明在 Node 22 下阻断 `pnpm install`（见 3.5）。本地推荐 fnm/nvm 并 `fnm use`（读 `.nvmrc`）。
+> **本仓库用 Node 22，不升级到 24**：`@marcusok/excel-exporter` 与 monorepo 根的 `engines.node` 均为 `>=22.0.0`，`.nvmrc` 锁定 `22`，CI `node-version: 22`。核心依赖 modern-xlsx@1.2.0 的 `engines.node` 声明为 `>=24.0.0`，但其 WASM 核心面向浏览器、与 Node 版本无关；本仓库在 Node 22（v22.22.2）下 `lint/typecheck/test/build` 全绿（52 个用例实测通过；CI 以 `RUN_PERF=0` 跳过 4 个性能基准、实跑 48 个，2026-08 更新）。注意：modern-xlsx README 无 "Node Usage" 章节，其顶部声明要求 "Node.js 24+"，Node 22 可用性由本仓库测试实测而非 README 声明。`.npmrc` 设 `engine-strict=false`，避免 modern-xlsx 的 engines 声明在 Node 22 下阻断 `pnpm install`（见 3.5）。本地推荐 fnm/nvm 并 `fnm use`（读 `.nvmrc`）。
 >
 > v2.0 曾把 `@playwright/test`（`^1.62.0`）列入「补充依赖」、并写「Node 24+ 升级指引」，二者均与实际仓库不符（本仓库无 Playwright、CI 跑 Node 22），v2.1 已删除该依赖行与升级指引。关于 `unplugin`：6.2 的 Vite 插件是 Vite 原生插件对象（`{ name, buildStart() }`），全程未 import `unplugin`；若未来要让资源拷贝同时支持 Webpack，再按需引入。
 

@@ -56,7 +56,7 @@ format: (value, row) => string | number | boolean;
 
 Can access the whole row for conditional formatting. Functions cannot cross the structured-clone boundary, so behavior differs per path:
 
-- **main path** (browser < 20,000 rows / Node < 50,000 rows): executed normally;
+- **main path** (auto mode: browser < 20,000 rows / Node < 50,000 rows; or any size with explicit `mode: "main"`): executed normally;
 - **Node's stream path** (≥ 50,000 rows): also main-thread, executed normally;
 - **browser worker path** (auto ≥ 20,000 rows, or explicit `mode: "worker"` / `mode: "stream"`): functions are **stripped with a `console.warn`** and the column exports its raw value (no error, no fallback to main).
 

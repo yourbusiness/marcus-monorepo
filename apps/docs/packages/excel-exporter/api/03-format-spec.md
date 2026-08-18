@@ -56,7 +56,7 @@ format: (value, row) => string | number | boolean;
 
 可以访问整行数据做条件格式化。函数无法穿过结构化克隆，因此各路径行为不同：
 
-- **main 路径**（浏览器 < 20,000 行 / Node < 50,000 行）：函数正常执行；
+- **main 路径**（auto 模式下浏览器 < 20,000 行 / Node < 50,000 行；或任意行数显式 `mode: "main"`）：函数正常执行；
 - **Node 的 stream 路径**（≥ 50,000 行）：同样在主线程执行，函数正常执行；
 - **浏览器 worker 路径**（auto ≥ 20,000 行，或显式 `mode: "worker"` / `mode: "stream"`）：函数会被**剥离并打印 `console.warn`**，该列以原始值导出（不会报错，也不会回落到 main）。
 

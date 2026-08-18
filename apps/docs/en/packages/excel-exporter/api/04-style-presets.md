@@ -2,15 +2,15 @@
 
 ## Presets
 
-| Name       | numFormat          | Other styles                                        | Use for                         |
-| ---------- | ------------------ | --------------------------------------------------- | ------------------------------- |
-| `header`   | —                  | Bold, size 12, `#1F4E79` fill, white text, centered | Headers (when applied manually) |
-| `currency` | `#,##0.00`         | Right-aligned                                       | Amounts                         |
-| `percent`  | `0.00%`            | Right-aligned                                       | Ratios, growth rates            |
-| `date`     | `yyyy-MM-dd`       | Centered                                            | Date columns                    |
-| `datetime` | `yyyy-MM-dd HH:mm` | Centered                                            | Date-time columns               |
-| `dataRow`  | —                  | Left-aligned, thin `#D0D0D0` bottom border          | Data rows                       |
-| `danger`   | —                  | Bold red `#C00000`, centered                        | Risk / anomalies                |
+| Name       | numFormat          | Other styles                                                   | Use for                         |
+| ---------- | ------------------ | -------------------------------------------------------------- | ------------------------------- |
+| `header`   | —                  | Bold, size 12, `1F4E79` fill, white text, centered             | Headers (when applied manually) |
+| `currency` | `#,##0.00`         | Right-aligned                                                  | Amounts                         |
+| `percent`  | `0.00%`            | Right-aligned                                                  | Ratios, growth rates            |
+| `date`     | `yyyy-MM-dd`       | Centered                                                       | Date columns                    |
+| `datetime` | `yyyy-MM-dd HH:mm` | Centered                                                       | Date-time columns               |
+| `dataRow`  | —                  | Left-aligned, vertically centered, thin `D0D0D0` bottom border | Data rows                       |
+| `danger`   | —                  | Bold red `C00000`, centered                                    | Risk / anomalies                |
 
 ## Usage
 

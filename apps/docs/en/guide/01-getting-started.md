@@ -1,6 +1,6 @@
 # Getting Started
 
-Run your first Excel export in minutes. Requirements: Node `>= 22`, pnpm `>= 9`.
+Run your first Excel export in minutes. Requirement: Node `>= 22`. Example commands use pnpm; npm / yarn work the same (`pnpm >= 9` is only a dev requirement of this repository, not of consumers).
 
 ## 1. Install
 

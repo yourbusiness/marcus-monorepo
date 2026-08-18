@@ -2,15 +2,15 @@
 
 ## SheetConfig
 
-| 字段           | 类型                        | 必填 | 说明                                        |
-| -------------- | --------------------------- | ---- | ------------------------------------------- |
-| `name`         | `string`                    | 是   | 工作表名：≤ 31 字符，不含 `: \ / ? * [ ]`   |
-| `columns`      | `ColumnConfig[]`            | 是   | 列定义                                      |
-| `data`         | `Record<string, unknown>[]` | 是   | 行数据                                      |
-| `headerStyle?` | `CellStyle`                 | —    | 表头行默认样式，可被列级 `headerStyle` 覆盖 |
-| `freezeRows?`  | `number`                    | —    | 冻结前 N 行表头                             |
-| `merges?`      | `MergeRange[]`              | —    | 合并单元格（相对数据区定位）                |
-| `autoFilter?`  | `boolean`                   | —    | 表头自动筛选                                |
+| 字段           | 类型                        | 必填 | 说明                                            |
+| -------------- | --------------------------- | ---- | ----------------------------------------------- |
+| `name`         | `string`                    | 是   | 工作表名：非空、≤ 31 字符，不含 `: \ / ? * [ ]` |
+| `columns`      | `ColumnConfig[]`            | 是   | 列定义                                          |
+| `data`         | `Record<string, unknown>[]` | 是   | 行数据                                          |
+| `headerStyle?` | `CellStyle`                 | —    | 表头行默认样式，可被列级 `headerStyle` 覆盖     |
+| `freezeRows?`  | `number`                    | —    | 冻结前 N 行表头                                 |
+| `merges?`      | `MergeRange[]`              | —    | 合并单元格（相对数据区定位）                    |
+| `autoFilter?`  | `boolean`                   | —    | 表头自动筛选                                    |
 
 ## ColumnConfig
 
@@ -62,5 +62,6 @@ import type {
   ExportResult,
   ExportMode,
   ExportPhase,
+  BorderStyle,
 } from "@marcusok/excel-exporter";
 ```

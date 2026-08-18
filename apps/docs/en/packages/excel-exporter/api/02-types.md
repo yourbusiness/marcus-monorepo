@@ -4,7 +4,7 @@
 
 | Field          | Type                        | Required | Description                                                    |
 | -------------- | --------------------------- | -------- | -------------------------------------------------------------- |
-| `name`         | `string`                    | yes      | ≤ 31 chars, no `: \ / ? * [ ]`                                 |
+| `name`         | `string`                    | yes      | Non-empty, ≤ 31 chars, no `: \ / ? * [ ]`                      |
 | `columns`      | `ColumnConfig[]`            | yes      | Column definitions                                             |
 | `data`         | `Record<string, unknown>[]` | yes      | Row data                                                       |
 | `headerStyle?` | `CellStyle`                 | —        | Default header style; overridden by column-level `headerStyle` |
@@ -62,5 +62,6 @@ import type {
   ExportResult,
   ExportMode,
   ExportPhase,
+  BorderStyle,
 } from "@marcusok/excel-exporter";
 ```

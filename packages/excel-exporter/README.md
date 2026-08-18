@@ -22,7 +22,7 @@
 pnpm add @marcusok/excel-exporter modern-xlsx
 ```
 
-环境：Node >= 22、pnpm >= 9。modern-xlsx@1.2.0 声明 `engines.node>=24`，但其 WASM 核心面向浏览器；本包在 Node 22 下测试全部通过（共 47 个用例；CI 默认 `RUN_PERF=0` 跳过 4 个性能基准，实跑 43 个）。本包在 1.2.0 上开发测试，推荐消费方锁定此版本（peerDep 兼容范围 `^1.2.0`，但未验证更高版本）。
+环境：Node >= 22（包管理器不限，本文示例用 pnpm；`pnpm >= 9` 仅是本仓库自身的开发环境要求）。modern-xlsx@1.2.0 声明 `engines.node>=24`，但其 WASM 核心面向浏览器；本包在 Node 22 下测试全部通过（共 52 个用例；CI 默认 `RUN_PERF=0` 跳过 4 个性能基准，实跑 48 个）。本包在 1.2.0 上开发测试，推荐消费方锁定此版本（peerDep 兼容范围 `^1.2.0`，但未验证更高版本）。
 
 > modern-xlsx 声明为 `peerDependency`，消费方必须显式安装。原因：(1) `modern-xlsx.wasm`（1.9MB）需由消费方作为静态资源部署，隐式依赖会掩盖这一硬性要求；(2) peerDep 语义上正确——本包是 modern-xlsx 的封装，版本控制权在消费方；(3) 包管理器默认会自动安装 peerDependency（npm 7+ / pnpm 8+ 起），隐式装上的版本不受消费方掌控，显式声明才能锁定版本意图。`xlsx`（SheetJS）为 optional peerDep，仅在需要降级兜底时安装。
 

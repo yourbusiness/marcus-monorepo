@@ -4,15 +4,15 @@
 
 ## 内置预设 StylePresets
 
-| 预设                    | 视觉效果                                                                                                          | 说明                                        |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `StylePresets.header`   | <span style="display:inline-block;width:12px;height:12px;background:#1F4E79;border-radius:2px"></span> 深蓝底白字 | 加粗、12 号字、深蓝底 `#1F4E79`、白字、居中 |
-| `StylePresets.currency` | `#,##0.00`                                                                                                        | 千分位 + 两位小数，右对齐                   |
-| `StylePresets.percent`  | `0.00%`                                                                                                           | 百分比格式，右对齐                          |
-| `StylePresets.date`     | `yyyy-MM-dd`                                                                                                      | 日期格式，居中                              |
-| `StylePresets.datetime` | `yyyy-MM-dd HH:mm`                                                                                                | 日期时间格式，居中                          |
-| `StylePresets.dataRow`  | 左对齐 + 底部细线                                                                                                 | 浅灰底边框 `#D0D0D0`                        |
-| `StylePresets.danger`   | <span style="display:inline-block;width:12px;height:12px;background:#C00000;border-radius:2px"></span> 红色加粗   | 红色加粗文字 `#C00000`，居中                |
+| 预设                    | 视觉效果                                                                                                          | 说明                                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `StylePresets.header`   | <span style="display:inline-block;width:12px;height:12px;background:#1F4E79;border-radius:2px"></span> 深蓝底白字 | 加粗、12 号字、深蓝底 `1F4E79`、白字、居中 |
+| `StylePresets.currency` | `#,##0.00`                                                                                                        | 千分位 + 两位小数，右对齐                  |
+| `StylePresets.percent`  | `0.00%`                                                                                                           | 百分比格式，右对齐                         |
+| `StylePresets.date`     | `yyyy-MM-dd`                                                                                                      | 日期格式，居中                             |
+| `StylePresets.datetime` | `yyyy-MM-dd HH:mm`                                                                                                | 日期时间格式，居中                         |
+| `StylePresets.dataRow`  | 左对齐 + 底部细线                                                                                                 | 左对齐、垂直居中，底部浅灰细线 `D0D0D0`    |
+| `StylePresets.danger`   | <span style="display:inline-block;width:12px;height:12px;background:#C00000;border-radius:2px"></span> 红色加粗   | 红色加粗文字 `C00000`，居中                |
 
 ```ts
 import { exportExcel, StylePresets } from "@marcusok/excel-exporter";

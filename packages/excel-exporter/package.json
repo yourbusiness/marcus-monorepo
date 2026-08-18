@@ -2,7 +2,7 @@
   "name": "@marcusok/excel-exporter",
   "version": "1.0.4",
   "type": "module",
-  "description": "High-performance Excel export engine built on modern-xlsx (Rust + WASM).",
+  "description": "Excel export engine built on modern-xlsx (Rust + WASM): declarative API, auto worker/stream routing, full cell styling.",
   "license": "MIT",
   "repository": {
     "type": "git",

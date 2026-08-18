@@ -8,9 +8,9 @@
 
 在看 workflow 之前，先把这个项目是什么搞清楚，否则后面看不懂。
 
-1. **这是一个 monorepo（大仓库）**：名字叫 `marcus-monorepo`，里面目前只装了一个真正的工具包 `@marcusok/excel-exporter`（一个用 Rust+WASM 加速的高性能 Excel 导出库）。证据见 [pnpm-workspace.yaml](../pnpm-workspace.yaml)，里面写着 `packages/*`，意思是"packages 文件夹下的每一个子文件夹，都是一个独立的包"。
+1. **这是一个 monorepo（大仓库）**：名字叫 `marcus-monorepo`，里面目前只装了一个真正的工具包 `@marcusok/excel-exporter`（一个用 Rust+WASM 加速的 Excel 导出库）。证据见 [pnpm-workspace.yaml](../pnpm-workspace.yaml)，里面写着 `packages/*`，意思是"packages 文件夹下的每一个子文件夹，都是一个独立的包"。
 2. **它是用 pnpm + Turborepo 管理的**：根目录 [package.json](../package.json) 里 `"packageManager": "pnpm@9.12.0"`，并且所有命令（build/test/lint/typecheck）都是通过 `turbo run xxx` 来跑的（见 [turbo.json](../turbo.json)）。
-3. **它最终会发布到 npm**：包名是 `@marcusok/excel-exporter`，当前版本 `1.0.3`（见 [packages/excel-exporter/package.json](../packages/excel-exporter/package.json)）。
+3. **它最终会发布到 npm**：包名是 `@marcusok/excel-exporter`，当前版本号见 [packages/excel-exporter/package.json](../packages/excel-exporter/package.json)（会随发版不断变化，本文不写死）。
 
 打个比方：你写了一篇很长的作文，交给老师之前，你希望有个"自动批改机"先帮你检查错别字、检查格式对不对、检查有没有跑题。**CI 就是这个自动批改机**。每次你交作业（提交代码）的时候，它就自动开机检查一遍。
 

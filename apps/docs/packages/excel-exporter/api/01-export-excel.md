@@ -46,8 +46,8 @@ configureWasm(options: LoaderOptions): void
 
 ## 其他导出符号
 
-- `WorkbookBuilder.create()` + `addSheet(config)` + `toBuffer()`：批量化构建，完整样式；
-- `exportAsStream(sheets, onProgress?)`：底层流式导出，返回 `{ bytes, rowCount }`；
+- `WorkbookBuilder.create()` + `addSheet(config)` + `toBuffer()` / `toBlob()`：批量化构建，完整样式；
+- `exportAsStream(sheets, onProgress?)`：底层流式导出，返回 `Promise<{ bytes, rowCount }>`；
 - `exportTable(options)`：常见表格数据便捷导出，支持 AntD `title`/`dataIndex` 与 Element Plus `label`/`prop`；
 - `exportEcharts(options)`：常见 ECharts 数据便捷导出，支持类目轴多系列、饼图 `name/value`、散点 `[x,y]`；
 - `getWasmLoader()`：访问全局 WASM 加载器（状态：idle / loading / ready / error）。
@@ -63,3 +63,5 @@ import {
   getWasmLoader,
 } from "@marcusok/excel-exporter";
 ```
+
+> 入口还重导出了若干底层工具与类型（如 `format-utils` 的 `applyFormat` / `validateSheetName`、`LoaderOptions` / `LoadState`、`BorderStyle` 等），本文档只覆盖常用的稳定 API，完整列表见 `src/index.ts`。

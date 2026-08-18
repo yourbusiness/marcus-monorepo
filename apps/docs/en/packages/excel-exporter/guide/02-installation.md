@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Node `>= 22`, pnpm `>= 9`
+- Node `>= 22` (the package's `engines` requirement); any package manager works — examples use pnpm, npm / yarn are equivalent
 - Browsers need WebAssembly support (all modern browsers)
 - `modern-xlsx@^1.2.0` is a required peerDependency; `xlsx` (SheetJS) is optional for the fallback
 
@@ -87,4 +87,4 @@ configureWasm({
 
 ## Node / SSR
 
-No browser static assets are needed in Node, but **WASM must be initialized first when running locally**: the auto-detected `file://` URL cannot be fetched by Node, and without bootstrapping the export silently degrades to the style-less SheetJS fallback. Either call `initWasmSync(readFileSync(...))` at your entry (full example in [Node/SSR](/en/packages/excel-exporter/guide/09-node-ssr)) or point `configureWasm({ wasmUrl })` at a fetchable HTTP URL. `auto` never uses Workers in Node; ≥ 50k rows switch to streaming on the main thread (the stream path does not use WASM).
+No browser static assets are needed in Node, but **WASM must be initialized first when running locally**: the auto-detected `file://` URL cannot be fetched by Node, and without bootstrapping the export degrades to the style-less SheetJS fallback (with an `[excel-exporter]` console warning). Either call `initWasmSync(readFileSync(...))` at your entry (full example in [Node/SSR](/en/packages/excel-exporter/guide/09-node-ssr)) or point `configureWasm({ wasmUrl })` at a fetchable HTTP URL. `auto` never uses Workers in Node; ≥ 50k rows switch to streaming on the main thread (the stream path does not use WASM).
