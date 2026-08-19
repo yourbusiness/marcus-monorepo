@@ -226,8 +226,8 @@ export const packages: PackageEntry[] = [
           },
         ],
         source: {
-          zh: "本机实测：真实 Chrome，6 列混合类型，auto 路径（毫秒）。",
-          en: "Measured locally: real Chrome, 6 mixed-type columns, auto path (ms).",
+          zh: "本机实测：真实 Chrome，6 列混合类型，auto 路径（毫秒）。在线演示的 sales 数据集为 9 列，耗时不能与此口径直接对照。",
+          en: "Measured locally: real Chrome, 6 mixed-type columns, auto path (ms). The live demo's sales dataset has 9 columns; its timings are not directly comparable to this baseline.",
         },
       },
     ],

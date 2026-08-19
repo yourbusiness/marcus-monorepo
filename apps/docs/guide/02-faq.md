@@ -34,4 +34,4 @@ Stream 路径 v1 不支持单元格样式、表头样式与列宽/冻结/筛选/
 
 ### 日期列显示为长文本，Excel 不识别为日期
 
-不声明 `format` 时，`Date` 值会按 JS 默认文本写入单元格（如 `Wed Jul 01 2026 00:00:00 GMT+0800 (China Standard Time)`），只是一段普通字符串。日期列需要声明 `format: { type: "date" }`（或 `datetime`）：Workbook 路径会写入 Excel 日期序列并自动注入对应 `numFormat`，单元格才会被 Excel 识别为真正的日期。
+不声明 `format` 时，`Date` 值会按普通文本写入单元格，Excel 不会识别为日期：Workbook 路径写入本地化长文本（如 `Wed Jul 01 2026 00:00:00 GMT+0800 (China Standard Time)`），stream / SheetJS 兜底路径写入 ISO 字符串（如 `2026-07-01T00:00:00.000Z`）。日期列需要声明 `format: { type: "date" }`（或 `datetime`）：Workbook 路径会写入 Excel 日期序列并自动注入对应 `numFormat`，单元格才会被 Excel 识别为真正的日期。

@@ -138,7 +138,7 @@ Worker 路径的主线程只做一次结构化克隆 `postMessage`（10 万行 ~
 | `datetime` | `{ type: "datetime", pattern: "yyyy-MM-dd HH:mm:ss" }`        | 日期时间序列化   |
 | `padding`  | `{ type: "padding", fill: "0", length: 6, align: "left" }`    | 字符串补齐       |
 
-`main` 模式额外支持函数形式：`format: (v) => v ? "是" : "否"`。
+主线程路径额外支持函数形式（`main`，以及 Node 下在主线程执行的 stream）：`format: (v) => v ? "是" : "否"`。浏览器 Worker 路径会剥离函数并打印警告，需改用 `FormatSpec`。
 
 ### 降级兜底
 
@@ -182,7 +182,7 @@ Node 版本：本包 `engines.node >=22`，CI 跑 Node 22。peer modern-xlsx 声
 - **5 万行割点**：`STREAM_THRESHOLD=50_000`（分支 `>=`），<5 万行 Workbook（完整样式），>=5 万行 Fast stream。
 - **Worker 阈值 20,000 行**：小于 2 万行走 main（10k×6 列浏览器实测约 120ms）；2 万行以上走 Worker，避免主线程长阻塞。
 - **ESM-only**：modern-xlsx 仅导出 ESM，本包不提供 CJS。
-- **format 的 Worker 兼容**：函数无法跨结构化克隆。Worker/Stream 仅接受 `FormatSpec`，`exportInWorker` 剥离函数格式。
+- **format 的 Worker 兼容**：函数无法跨结构化克隆。浏览器 Worker 路径（含 Worker 内执行的 stream）仅接受 `FormatSpec`，`exportInWorker` 剥离函数格式；Node 的 stream 在主线程执行，函数可用。
 - **Fast stream 无样式**：大文件路径输出 minimal OOXML，不支持 `StyleBuilder`。`width`/`freezeRows` 等在 stream 下仅 warn 后丢弃。
 - **并发安全**：Worker 通信用 requestId 路由 + `pending: Map`，`onmessage` 只注册一次。
 

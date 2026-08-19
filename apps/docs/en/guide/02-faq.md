@@ -34,4 +34,4 @@ No. All processing happens in the browser or the Node process; business data nev
 
 ### Date columns render as long text, not dates
 
-Without a `format`, `Date` values are written as JS default text (e.g. `Wed Jul 01 2026 00:00:00 GMT+0800 (China Standard Time)`) — plain strings Excel does not recognize. Declare `format: { type: "date" }` (or `datetime`) on date columns: the Workbook path then stores the Excel date serial and auto-injects the matching `numFormat`, so the cell becomes a real date.
+Without a `format`, `Date` values are written as plain text Excel does not recognize as a date: the Workbook path writes the localized long form (e.g. `Wed Jul 01 2026 00:00:00 GMT+0800 (China Standard Time)`), while the stream / SheetJS fallback paths write an ISO string (e.g. `2026-07-01T00:00:00.000Z`). Declare `format: { type: "date" }` (or `datetime`) on date columns: the Workbook path then stores the Excel date serial and auto-injects the matching `numFormat`, so the cell becomes a real date.
