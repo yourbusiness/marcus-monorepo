@@ -37,6 +37,65 @@ describe("exportAsStream round-trip", () => {
     expect(String(ws.cell("C1001").value)).toBe(String(999 * 1.5));
   });
 
+  it("writes multi-row grouped headers and merges in stream mode", async () => {
+    const { bytes } = await exportAsStream([
+      {
+        name: "Grouped",
+        columns: [
+          { key: "product", header: "产品" },
+          {
+            header: "收入情况",
+            children: [
+              {
+                header: "本月",
+                children: [
+                  { key: "m_qty", header: "数量" },
+                  { key: "m_amt", header: "金额" },
+                ],
+              },
+              {
+                header: "本年累计",
+                children: [
+                  { key: "y_qty", header: "数量" },
+                  { key: "y_amt", header: "金额" },
+                ],
+              },
+            ],
+          },
+        ],
+        data: [{ product: "A", m_qty: 1, m_amt: 2, y_qty: 3, y_amt: 4 }],
+      },
+    ]);
+    const wb = await readBuffer(bytes);
+    const ws = wb.getSheet("Grouped")!;
+    // 3 header rows + 1 data row.
+    expect(ws.rowCount).toBe(4);
+    expect(ws.cell("B1").value).toBe("收入情况");
+    expect(ws.cell("B2").value).toBe("本月");
+    expect(ws.cell("B3").value).toBe("数量");
+    expect(ws.cell("E3").value).toBe("金额");
+    expect(ws.cell("A4").value).toBe("A");
+    for (const r of ["A1:A3", "B1:E1", "B2:C2", "D2:E2"]) {
+      expect(ws.mergeCells).toContain(r);
+    }
+  });
+
+  it("emits no mergeCells for a flat header", async () => {
+    const { bytes } = await exportAsStream([
+      {
+        name: "S",
+        columns: [
+          { key: "a", header: "A" },
+          { key: "b", header: "B" },
+        ],
+        data: [{ a: 1, b: 2 }],
+      },
+    ]);
+    const wb = await readBuffer(bytes);
+    // modern-xlsx returns null (not []) when the sheet has no <mergeCells>.
+    expect(wb.getSheet("S")!.mergeCells ?? []).toHaveLength(0);
+  });
+
   it("handles multi-sheet streaming", async () => {
     const { bytes, rowCount } = await exportAsStream([
       {

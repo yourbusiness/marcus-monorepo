@@ -39,7 +39,7 @@ console.log(result); // engine: "modern-xlsx", mode: "stream", rowCount: 100000
 ## Notes
 
 - At 100k rows `auto` picks `worker + Fast stream`: ~0.8s measured (vs 17.5s on the Workbook path);
-- Stream v1 does **not** support styles/width/freeze/filter/merges; a console warning is expected;
+- Stream v1 **supports multi-row headers and merges**, but does **not** support styles/width/freeze/filter; a console warning is expected;
 - `onProgress` reports every 1000 rows;
 - Set `decimals` explicitly on numeric columns for value consistency with the Workbook path.
 

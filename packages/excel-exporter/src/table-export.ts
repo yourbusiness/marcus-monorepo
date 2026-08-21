@@ -26,6 +26,8 @@ export interface TableColumnInput {
   style?: CellStyle;
   headerStyle?: CellStyle;
   format?: ColumnConfig["format"];
+  /** Grouped columns (Ant Design / Element Plus `children`): become a multi-row header. */
+  children?: TableColumnInput[];
 }
 
 export interface TableSheetInput {
@@ -57,26 +59,47 @@ function normalizeHeader(
 }
 
 /**
+ * Recursively map a table column (Ant Design / Element Plus shaped) to a
+ * `ColumnConfig`. Columns with `children` become group headers (multi-row
+ * header); leaves need a usable key. Group `width`/`style`/`format` are not
+ * meaningful (no data cells), so they are dropped.
+ */
+function toColumnConfig(col: TableColumnInput, index: number): ColumnConfig {
+  const key = col.key ?? col.dataIndex ?? col.prop;
+  const header = normalizeHeader(
+    col.header ?? col.title ?? col.label,
+    key ?? `group-${index}`,
+  );
+  const children = col.children?.map((child, i) => toColumnConfig(child, i));
+
+  if (children?.length) {
+    return {
+      header,
+      ...(col.headerStyle !== undefined && { headerStyle: col.headerStyle }),
+      children,
+    };
+  }
+  if (!key || typeof key !== "string") {
+    throw new Error(
+      `[excel-exporter] table column #${index} has no usable key. Provide key, dataIndex, or prop.`,
+    );
+  }
+  return {
+    key,
+    header,
+    ...(col.width !== undefined && { width: col.width }),
+    ...(col.style !== undefined && { style: col.style }),
+    ...(col.headerStyle !== undefined && { headerStyle: col.headerStyle }),
+    ...(col.format !== undefined && { format: col.format }),
+  };
+}
+
+/**
  * Convert a common table `columns + data` shape into the library's generic
  * `SheetConfig`. This keeps the adapter explicit and easy to test.
  */
 export function tableToSheet(input: TableSheetInput): SheetConfig {
-  const columns = input.columns.map((col, index): ColumnConfig => {
-    const key = col.key ?? col.dataIndex ?? col.prop;
-    if (!key || typeof key !== "string") {
-      throw new Error(
-        `[excel-exporter] table column #${index} has no usable key. Provide key, dataIndex, or prop.`,
-      );
-    }
-    return {
-      key,
-      header: normalizeHeader(col.header ?? col.title ?? col.label, key),
-      ...(col.width !== undefined && { width: col.width }),
-      ...(col.style !== undefined && { style: col.style }),
-      ...(col.headerStyle !== undefined && { headerStyle: col.headerStyle }),
-      ...(col.format !== undefined && { format: col.format }),
-    };
-  });
+  const columns = input.columns.map((col, index) => toColumnConfig(col, index));
 
   return {
     name: input.sheetName ?? "Sheet1",

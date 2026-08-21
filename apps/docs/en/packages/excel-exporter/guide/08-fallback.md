@@ -11,14 +11,15 @@ When the WASM path is unavailable, the library automatically degrades to SheetJS
 
 ## Behavioral differences
 
-| Dimension                        | modern-xlsx path | SheetJS fallback                                                                         |
-| -------------------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
-| `ExportResult.engine`            | `"modern-xlsx"`  | `"sheetjs"`                                                                              |
-| Cell styles                      | full             | stripped (SheetJS CE cannot write styles)                                                |
-| Width / freeze / filter / merges | supported        | not supported                                                                            |
-| FormatSpec                       | supported        | supported (enum/padding/number/date semantics kept; dates become readable strings)       |
-| Number formats                   | `numFormat`      | `decimals` baked into stored value                                                       |
-| Warning                          | —                | console prints `[excel-exporter] Falling back to SheetJS (styles stripped). Reason: ...` |
+| Dimension                  | modern-xlsx path | SheetJS fallback                                                                         |
+| -------------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
+| `ExportResult.engine`      | `"modern-xlsx"`  | `"sheetjs"`                                                                              |
+| Cell styles                | full             | stripped (SheetJS CE cannot write styles)                                                |
+| Multi-row headers / merges | supported        | supported (merges are structure, not styles)                                             |
+| Width / freeze / filter    | supported        | not supported                                                                            |
+| FormatSpec                 | supported        | supported (enum/padding/number/date semantics kept; dates become readable strings)       |
+| Number formats             | `numFormat`      | `decimals` baked into stored value                                                       |
+| Warning                    | —                | console prints `[excel-exporter] Falling back to SheetJS (styles stripped). Reason: ...` |
 
 ## Where SheetJS comes from
 

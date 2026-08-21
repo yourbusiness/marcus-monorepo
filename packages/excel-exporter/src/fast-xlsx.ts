@@ -1,6 +1,7 @@
 import { strToU8, zipSync } from "fflate";
 import type { SheetConfig } from "./types";
 import { displayValue, validateSheetName } from "./format-utils";
+import { flattenColumnTree, a1Range } from "./column-tree";
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 const MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -115,31 +116,40 @@ function buildWorksheetXml(
   stringTable?: SharedStringTable,
 ): string {
   validateSheetName(config.name);
-  const cols = config.columns.map((c, i) => ({
-    col: c,
-    letter: columnName(i),
-  }));
+  const { leaves, headerGrid, headerMerges, headerRowCount } =
+    flattenColumnTree(config.columns);
+  const letters = leaves.map((_, i) => columnName(i));
   const out: string[] = [];
 
-  // Header row.
-  out.push(`<row r="1">`);
-  for (const { col, letter } of cols) {
-    appendCell(out, `${letter}1`, stringifyCell(col.header), (value) =>
-      stringTable!.intern(value),
-    );
-  }
-  out.push(`</row>`);
-
-  for (let rowIndex = 0; rowIndex < config.data.length; rowIndex++) {
-    const item = config.data[rowIndex];
-    const rowNumber = rowIndex + 2;
+  // Header rows (1..headerRowCount); cells covered by a header merge are skipped.
+  for (let rowIndex = 0; rowIndex < headerRowCount; rowIndex++) {
+    const rowNumber = rowIndex + 1;
     out.push(`<row r="${rowNumber}">`);
-    for (const { col, letter } of cols) {
+    const gridRow = headerGrid[rowIndex];
+    for (let colIndex = 0; colIndex < letters.length; colIndex++) {
+      const value = gridRow[colIndex];
+      if (value == null) continue;
       appendCell(
         out,
-        `${letter}${rowNumber}`,
-        displayValue(col, item),
-        (value) => stringTable!.intern(value),
+        `${letters[colIndex]}${rowNumber}`,
+        stringifyCell(value),
+        (s) => stringTable!.intern(s),
+      );
+    }
+    out.push(`</row>`);
+  }
+
+  // Data rows start after the header block.
+  for (let rowIndex = 0; rowIndex < config.data.length; rowIndex++) {
+    const item = config.data[rowIndex];
+    const rowNumber = headerRowCount + 1 + rowIndex;
+    out.push(`<row r="${rowNumber}">`);
+    for (let colIndex = 0; colIndex < leaves.length; colIndex++) {
+      appendCell(
+        out,
+        `${letters[colIndex]}${rowNumber}`,
+        displayValue(leaves[colIndex], item),
+        (s) => stringTable!.intern(s),
       );
     }
     out.push(`</row>`);
@@ -149,11 +159,26 @@ function buildWorksheetXml(
     }
   }
 
+  // Header merges (already sheet-relative) + data merges (data-relative, offset
+  // by headerRowCount). `merges` is not in the skipped list: multi-row headers
+  // and merges are the feature this path now supports.
+  const merges = [
+    ...headerMerges.map((m) => a1Range(m.row, m.col, m.rowSpan, m.colSpan)),
+    ...(config.merges ?? []).map((m) =>
+      a1Range(headerRowCount + m.row, m.col, m.rowspan, m.colspan),
+    ),
+  ];
+  const mergeXml = merges.length
+    ? `<mergeCells count="${merges.length}">${merges
+        .map((ref) => `<mergeCell ref="${ref}"/>`)
+        .join("")}</mergeCells>`
+    : "";
+
   return (
     XML_DECL +
     `<worksheet xmlns="${MAIN_NS}"><sheetData>${out.join(
       "",
-    )}</sheetData></worksheet>`
+    )}</sheetData>${mergeXml}</worksheet>`
   );
 }
 
@@ -195,7 +220,6 @@ export function exportFastXlsx(
       skipped.push("style");
     if (config.freezeRows) skipped.push("freezeRows");
     if (config.autoFilter) skipped.push("autoFilter");
-    if (config.merges?.length) skipped.push("merges");
     if (skipped.length) {
       console.warn(
         "[excel-exporter] stream mode: features not supported (" +

@@ -1,6 +1,7 @@
 import type { ExportOptions, ExportResult } from "./types";
 import { displayValue, validateSheetName } from "./format-utils";
 import { triggerDownload } from "./download";
+import { flattenColumnTree } from "./column-tree";
 
 const XLSX_MIME =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -15,6 +16,9 @@ type SheetJSApi = {
   };
   write(wb: unknown, opts: { type: string; bookType: string }): ArrayBuffer;
 };
+
+/** Minimal SheetJS worksheet shape we touch (`!merges` is standard SheetJS). */
+type SheetJSWs = { "!merges"?: unknown };
 
 function cast<T>(m: unknown): T {
   return m as T;
@@ -57,13 +61,33 @@ export async function exportWithSheetJS(
     const wb = XLSX.utils.book_new();
     for (const s of options.sheets) {
       validateSheetName(s.name);
+      const { leaves, headerGrid, headerMerges, headerRowCount } =
+        flattenColumnTree(s.columns);
       const aoa = [
-        s.columns.map((c) => c.header),
+        // null cells (covered by header merges) become blank strings.
+        ...headerGrid.map((row) => row.map((v) => (v == null ? "" : v))),
         // Apply FormatSpec (enum/padding/number/date) for data semantics; dates
         // format to readable strings since SheetJS CE has no style-write support.
-        ...s.data.map((row) => s.columns.map((c) => displayValue(c, row))),
+        ...s.data.map((row) => leaves.map((c) => displayValue(c, row))),
       ];
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const ws = XLSX.utils.aoa_to_sheet(aoa) as SheetJSWs;
+      // Merges survive the fallback: they are sheet structure, not styles
+      // (SheetJS CE still cannot write styles). Header merges are already
+      // sheet-relative; data merges are data-relative, offset by headerRowCount.
+      const merges = [
+        ...headerMerges.map((m) => ({
+          s: { r: m.row, c: m.col },
+          e: { r: m.row + m.rowSpan - 1, c: m.col + m.colSpan - 1 },
+        })),
+        ...(s.merges ?? []).map((m) => ({
+          s: { r: headerRowCount + m.row, c: m.col },
+          e: {
+            r: headerRowCount + m.row + m.rowspan - 1,
+            c: m.col + m.colspan - 1,
+          },
+        })),
+      ];
+      if (merges.length) ws["!merges"] = merges;
       XLSX.utils.book_append_sheet(wb, ws, s.name);
     }
     const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });

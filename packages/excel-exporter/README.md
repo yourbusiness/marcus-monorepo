@@ -22,7 +22,7 @@
 pnpm add @marcusok/excel-exporter modern-xlsx
 ```
 
-环境：Node >= 22（包管理器不限，本文示例用 pnpm；`pnpm >= 9` 仅是本仓库自身的开发环境要求）。modern-xlsx@1.2.0 声明 `engines.node>=24`，但其 WASM 核心面向浏览器；本包在 Node 22 下测试全部通过（共 54 个用例；CI 默认 `RUN_PERF=0` 跳过 4 个性能基准，实跑 50 个）。本包在 1.2.0 上开发测试，推荐消费方锁定此版本（peerDep 兼容范围 `^1.2.0`，但未验证更高版本）。
+环境：Node >= 22（包管理器不限，本文示例用 pnpm；`pnpm >= 9` 仅是本仓库自身的开发环境要求）。modern-xlsx@1.2.0 声明 `engines.node>=24`，但其 WASM 核心面向浏览器；本包在 Node 22 下测试全部通过（共 67 个用例；CI 默认 `RUN_PERF=0` 跳过 4 个性能基准，实跑 63 个）。本包在 1.2.0 上开发测试，推荐消费方锁定此版本（peerDep 兼容范围 `^1.2.0`，但未验证更高版本）。
 
 > modern-xlsx 声明为 `peerDependency`，消费方必须显式安装。原因：(1) `modern-xlsx.wasm`（1.9MB）需由消费方作为静态资源部署，隐式依赖会掩盖这一硬性要求；(2) peerDep 语义上正确——本包是 modern-xlsx 的封装，版本控制权在消费方；(3) 包管理器默认会自动安装 peerDependency（npm 7+ / pnpm 8+ 起），隐式装上的版本不受消费方掌控，显式声明才能锁定版本意图。`xlsx`（SheetJS）为 optional peerDep，仅在需要降级兜底时安装。
 
@@ -110,6 +110,37 @@ await exportExcel({
 });
 ```
 
+### 多级表头与合并
+
+列支持 `children` 树形结构生成多行表头：分组列表头自动跨其全部叶子列合并，叶子列表头自动纵向跨满剩余表头行，无需手工计算合并范围。数据区合并用 `merges`（相对数据区定位，`row 0` = 第一条数据行）。
+
+```ts
+columns: [
+  { key: "product", header: "产品" },
+  {
+    header: "收入情况",
+    children: [
+      {
+        header: "本月",
+        children: [
+          { key: "m_qty", header: "数量" },
+          { key: "m_amt", header: "金额" },
+        ],
+      },
+      {
+        header: "本年累计",
+        children: [
+          { key: "y_qty", header: "数量" },
+          { key: "y_amt", header: "金额" },
+        ],
+      },
+    ],
+  },
+],
+```
+
+多级表头与合并（含表头合并）在 main / worker / stream / SheetJS 兜底四条路径均可用；stream 与兜底路径保留合并，但依旧不支持样式。
+
 ### 自动路由
 
 `index.ts` 的 `pickMode()` 根据数据量自动选择最优路径（可通过 `mode` 参数覆盖）：
@@ -120,7 +151,7 @@ await exportExcel({
 | 20,000–49,999 行 | Worker + Workbook    | main     |
 | >= 50,000 行     | Worker + Fast stream | stream   |
 
-Worker 路径的主线程只做一次结构化克隆 `postMessage`（10 万行 ~94ms），导出工作在 Worker 线程执行。Workbook 路径支持完整 `CellStyle`；Fast stream 与原先的 stream 一样不支持 `StyleBuilder`/布局样式，`width`/`freezeRows` 等仅 warn 后丢弃。
+Worker 路径的主线程只做一次结构化克隆 `postMessage`（10 万行 ~94ms），导出工作在 Worker 线程执行。Workbook 路径支持完整 `CellStyle`；Fast stream 支持多行表头与合并，但不支持 `StyleBuilder`/布局样式，`width`/`freezeRows` 等仅 warn 后丢弃。
 
 ### 样式预设
 
@@ -183,7 +214,7 @@ Node 版本：本包 `engines.node >=22`，CI 跑 Node 22。peer modern-xlsx 声
 - **Worker 阈值 20,000 行**：小于 2 万行走 main（10k×6 列浏览器实测约 120ms）；2 万行以上走 Worker，避免主线程长阻塞。
 - **ESM-only**：modern-xlsx 仅导出 ESM，本包不提供 CJS。
 - **format 的 Worker 兼容**：函数无法跨结构化克隆。浏览器 Worker 路径（含 Worker 内执行的 stream）仅接受 `FormatSpec`，`exportInWorker` 剥离函数格式；Node 的 stream 在主线程执行，函数可用。
-- **Fast stream 无样式**：大文件路径输出 minimal OOXML，不支持 `StyleBuilder`。`width`/`freezeRows` 等在 stream 下仅 warn 后丢弃。
+- **Fast stream 无样式**：大文件路径输出 minimal OOXML，不支持 `StyleBuilder`。多行表头与合并保留；`width`/`freezeRows` 等在 stream 下仅 warn 后丢弃。
 - **并发安全**：Worker 通信用 requestId 路由 + `pending: Map`，`onmessage` 只注册一次。
 
 ## License

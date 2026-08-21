@@ -146,14 +146,14 @@ export function displayValue(
         spec.type === "datetime"
           ? (spec.pattern ?? DEFAULT_DATETIME_PATTERN)
           : (spec.pattern ?? DEFAULT_DATE_PATTERN);
-      return formatDateByPattern(row[col.key], pattern);
+      return formatDateByPattern(row[col.key ?? ""], pattern);
     }
     if (spec.type === "number") {
       // Stream/SheetJS paths have no numFormat support, so the configured
       // decimals must be baked into the displayed value here. The workbook
       // path keeps full precision and renders decimals via numFormat instead.
-      const n = Number(row[col.key]);
-      if (!Number.isFinite(n)) return toStr(row[col.key]);
+      const n = Number(row[col.key ?? ""]);
+      if (!Number.isFinite(n)) return toStr(row[col.key ?? ""]);
       return Number(n.toFixed(spec.decimals ?? 0));
     }
   }
@@ -170,7 +170,9 @@ export function resolveCellFormat(
   col: ColumnConfig,
   item: Record<string, unknown>,
 ): unknown {
-  const raw = item[col.key];
+  // `col.key` is optional at the type level (group columns omit it); callers
+  // pass flattened leaves, whose keys are validated by flattenColumnTree.
+  const raw = item[col.key ?? ""];
   if (!col.format) return raw ?? "";
   if (typeof col.format === "function") return col.format(raw, item);
   return applyFormat(raw, col.format);

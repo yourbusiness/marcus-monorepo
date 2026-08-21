@@ -21,15 +21,17 @@ Worker path behavior:
 
 Known stream limitations (v1):
 
-| Feature                       | Stream path                                        |
-| ----------------------------- | -------------------------------------------------- |
-| Cell styles (`style`)         | not supported                                      |
-| Header styles (`headerStyle`) | not supported                                      |
-| Column width (`width`)        | not supported                                      |
-| Freeze / auto-filter / merges | not supported                                      |
-| Custom number formats         | not supported (`decimals` baked into stored value) |
-| Date formats                  | readable strings per pattern                       |
-| Progress callback             | reported every 1000 rows                           |
+| Feature                        | Stream path                                        |
+| ------------------------------ | -------------------------------------------------- |
+| Multi-row headers (`children`) | supported (header auto-merge)                      |
+| Cell merges (`merges`)         | supported (data area)                              |
+| Cell styles (`style`)          | not supported                                      |
+| Header styles (`headerStyle`)  | not supported                                      |
+| Column width (`width`)         | not supported                                      |
+| Freeze / auto-filter           | not supported                                      |
+| Custom number formats          | not supported (`decimals` baked into stored value) |
+| Date formats                   | readable strings per pattern                       |
+| Progress callback              | reported every 1000 rows                           |
 
 Skipped features (cell styles, header styles, column width, freeze, ...) print `[excel-exporter] stream mode: features not supported (...)` in the console.
 

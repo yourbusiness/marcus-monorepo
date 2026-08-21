@@ -14,14 +14,17 @@
 
 ## ColumnConfig
 
-| Field          | Type                     | Required | Description                                                                                                                |
-| -------------- | ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `key`          | `string`                 | yes      | Field name on the data row                                                                                                 |
-| `header`       | `string`                 | yes      | Header text                                                                                                                |
-| `width?`       | `number`                 | —        | Column width (Excel character units)                                                                                       |
-| `style?`       | `CellStyle`              | —        | Data-cell style (headers excluded)                                                                                         |
-| `headerStyle?` | `CellStyle`              | —        | Header style for this column; wins over sheet-level `headerStyle`                                                          |
-| `format?`      | `FormatSpec \| Function` | —        | Value formatting; functions run on main-thread paths and are stripped on the browser worker path (see the FormatSpec page) |
+| Field          | Type                     | Required     | Description                                                                                                                                   |
+| -------------- | ------------------------ | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `key?`         | `string`                 | leaf columns | Field name on the data row; group columns (with `children`) may omit it                                                                       |
+| `header`       | `string`                 | yes          | Header text (leaf and group columns alike)                                                                                                    |
+| `children?`    | `ColumnConfig[]`         | —            | Group column: produces a multi-row header; its header cell merges across all descendant leaf columns. `children: []` is a leaf                |
+| `width?`       | `number`                 | —            | Column width (Excel character units); leaf columns only                                                                                       |
+| `style?`       | `CellStyle`              | —            | Data-cell style (headers excluded); leaf columns only                                                                                         |
+| `headerStyle?` | `CellStyle`              | —            | Header style for this column (group header cells included); wins over sheet-level `headerStyle`                                               |
+| `format?`      | `FormatSpec \| Function` | —            | Value formatting; leaf columns only; functions run on main-thread paths and are stripped on the browser worker path (see the FormatSpec page) |
+
+A column with `children` is a group: no data cells, header rows only. Header row count = max tree depth; leaf headers span the remaining header rows vertically, group headers span their leaf subtree horizontally — merges are generated automatically (no manual `merges` needed for headers).
 
 ## MergeRange
 

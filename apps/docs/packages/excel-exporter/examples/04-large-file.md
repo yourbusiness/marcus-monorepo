@@ -39,7 +39,7 @@ console.log(result); // engine: "modern-xlsx", mode: "stream", rowCount: 100000
 ## 要点
 
 - 10 万行下 `auto` 选择 `worker + Fast stream`，实测约 0.8s（Workbook 路径同数据量 17.5s）；
-- stream 路径 v1 **不支持样式/列宽/冻结/筛选/合并**，会打印 console 警告，属预期行为；
+- stream 路径 v1 **支持多行表头与合并**，但**不支持样式/列宽/冻结/筛选**，会打印 console 警告，属预期行为；
 - `onProgress` 每 1000 行上报一次，适合展示进度；
 - 数字列建议显式声明 `decimals`，保证存储值与 Workbook 路径一致。
 

@@ -18,7 +18,61 @@ await exportExcel({
 
 ## 冻结行
 
-`freezeRows: 1` 冻结表头（映射到 `frozenPane`），浏览大表时表头始终可见。
+`freezeRows: 1` 冻结表头（映射到 `frozenPane`），浏览大表时表头始终可见。多级表头建议 `freezeRows >= 表头行数`，让所有表头行都保持可见。
+
+## 多级表头
+
+列用 `children` 组成树形结构，即可生成多行表头；分组表头格会自动合并（跨其全部叶子列），叶子列表头自动纵向跨满剩余表头行——无需手工计算合并范围。
+
+```ts
+await exportExcel({
+  filename: "月度销售",
+  sheets: [
+    {
+      name: "销售",
+      freezeRows: 3,
+      columns: [
+        { key: "product", header: "产品" },
+        {
+          header: "收入情况",
+          children: [
+            {
+              header: "本月",
+              children: [
+                { key: "m_qty", header: "数量" },
+                { key: "m_amt", header: "金额" },
+              ],
+            },
+            {
+              header: "本年累计",
+              children: [
+                { key: "y_qty", header: "数量" },
+                { key: "y_amt", header: "金额" },
+              ],
+            },
+          ],
+        },
+      ],
+      data: [{ product: "A", m_qty: 1, m_amt: 2, y_qty: 3, y_amt: 4 }],
+    },
+  ],
+});
+```
+
+生成 3 行表头：
+
+| 行  | A    | B                    | C    | D                    | E    |
+| --- | ---- | -------------------- | ---- | -------------------- | ---- |
+| 1   | 产品 | 收入情况（合并 B–E） |      |                      |      |
+| 2   |      | 本月（合并 B–C）     |      | 本年累计（合并 D–E） |      |
+| 3   |      | 数量                 | 金额 | 数量                 | 金额 |
+
+规则：
+
+- 叶子列（无 `children`）必须有 `key`；分组列可省略 `key`，只贡献表头；
+- `width` / `style` / `format` 只对叶子列生效；
+- 分组表头样式用该列的 `headerStyle`，叶子表头样式同理（未设置时回退到表级 `headerStyle`）；
+- 任意路径（main / worker / stream / SheetJS 兜底）都支持多级表头，stream 与兜底路径同样保留合并（样式除外）。
 
 ## 合并单元格
 

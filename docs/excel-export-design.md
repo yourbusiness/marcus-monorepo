@@ -2824,6 +2824,8 @@ if ("requestIdleCallback" in window) {
 >
 > **stream 的样式限制（已知取舍；v2.6 注）**：现行 fast-xlsx 完全不产出样式（连 `style`/`headerStyle` 数据列样式也 warn 后丢弃）；v2.0 时代的 `StreamingXlsxWriter` 也只接受 `StreamingCellInput.style` 数字索引（需配合 `setStylesXml`）。v1 的 stream 路径只支持纯数据，且 `width`/`freezeRows`/`autoFilter`/`merges` 等 `SheetConfig` 布局字段在 stream 模式下仅 `console.warn` 后丢弃（见 4.8 现行源码的 skipped 清单）。需要完整样式的大数据导出（≥5万行）在 Phase 1 暂不支持，业务侧需：① 拆分为 <5 万行（≤49,999）/文件走 Workbook；② 或接受纯数据。这是工程取舍，非 bug。
 >
+> **v2.7 注（多级表头与合并）**：fast-xlsx 已支持多行表头（`ColumnConfig.children`）与合并（表头合并 + 数据区 `merges`，输出 `<mergeCells>`），`merges` 已从 skipped 清单移除；stream 仍不支持 `style`/`headerStyle`/`width`/`freezeRows`/`autoFilter`。SheetJS 兜底同样支持多级表头与合并（`!merges`）。扁平列输出与改造前逐字节一致（单格跨度的表头不产生 merge）。
+>
 > **Worker 阈值 20,000 行（v2.6 对齐源码）**：main 模式 1万行4列实测 ~117ms、1万行10列 263ms 全阻塞（toBuffer 占大头）。现行产品决策为 <20,000 行接受主线程短阻塞、≥20,000 行进 Worker（提交 0c0fbd5，v1.8 时代曾为 500）。阈值可由调用方通过 `mode` 显式覆盖。
 
 ### 5.4 降级链路

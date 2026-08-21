@@ -15,7 +15,8 @@
 | --------------------- | ---------------- | -------------------------------------------------------------------------------------- |
 | `ExportResult.engine` | `"modern-xlsx"`  | `"sheetjs"`                                                                            |
 | 单元格样式            | 完整             | 剥离（SheetJS CE 不支持样式写入）                                                      |
-| 列宽/冻结/筛选/合并   | 支持             | 不支持                                                                                 |
+| 多行表头 / 合并       | 支持             | 支持（合并不是样式，SheetJS 可写）                                                     |
+| 列宽/冻结/筛选        | 支持             | 不支持                                                                                 |
 | FormatSpec            | 支持             | 支持（enum/padding/number/date 语义保留，日期输出为可读字符串）                        |
 | 数字格式              | `numFormat`      | `decimals` 烧入存储值                                                                  |
 | 警告                  | —                | console 打印 `[excel-exporter] Falling back to SheetJS (styles stripped). Reason: ...` |

@@ -18,7 +18,53 @@ Sheet names must satisfy ECMA-376 constraints: non-empty, ≤ 31 characters, and
 
 ## Frozen rows
 
-`freezeRows: 1` freezes the header row (mapped to `frozenPane`).
+`freezeRows: 1` freezes the header row (mapped to `frozenPane`). For multi-row headers, prefer `freezeRows >= header row count` so all header rows stay visible.
+
+## Multi-row headers
+
+Nest columns with `children` to get multi-row headers. Group header cells merge across all their descendant leaf columns, and leaf headers span the remaining header rows vertically — no manual merge math required.
+
+```ts
+await exportExcel({
+  filename: "monthly-sales",
+  sheets: [
+    {
+      name: "Sales",
+      freezeRows: 3,
+      columns: [
+        { key: "product", header: "Product" },
+        {
+          header: "Revenue",
+          children: [
+            {
+              header: "This month",
+              children: [
+                { key: "m_qty", header: "Qty" },
+                { key: "m_amt", header: "Amount" },
+              ],
+            },
+            {
+              header: "YTD",
+              children: [
+                { key: "y_qty", header: "Qty" },
+                { key: "y_amt", header: "Amount" },
+              ],
+            },
+          ],
+        },
+      ],
+      data: [{ product: "A", m_qty: 1, m_amt: 2, y_qty: 3, y_amt: 4 }],
+    },
+  ],
+});
+```
+
+Rules:
+
+- Leaf columns (no `children`) need a `key`; group columns may omit it and contribute header rows only;
+- `width` / `style` / `format` apply to leaf columns only;
+- Group header cells style via that column's `headerStyle`, leaf headers likewise (falling back to the sheet-level `headerStyle`);
+- Multi-row headers work on every path (main / worker / stream / SheetJS fallback); merges survive on the stream and fallback paths too (styles excepted).
 
 ## Merged cells
 

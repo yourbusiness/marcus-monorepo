@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { exportWithSheetJS } from "../fallback";
 import type { ExportOptions } from "../types";
+import { readBuffer } from "./setup";
 
 // Minimal options shared by all fallback cases. `download: false` keeps the
 // test headless: triggerDownload() is a no-op in Node anyway, but this also
@@ -53,6 +54,48 @@ describe("SheetJS fallback (exportWithSheetJS)", () => {
 
     expect(result.success).toBe(true);
     expect(result.engine).toBe("sheetjs");
+  });
+
+  it("writes grouped headers and data merges in the fallback", async () => {
+    const opts = makeOptions("fallback-grouped");
+    opts.sheets[0] = {
+      name: "Sheet1",
+      columns: [
+        { key: "product", header: "产品" },
+        {
+          header: "收入情况",
+          children: [
+            {
+              header: "本月",
+              children: [
+                { key: "m_qty", header: "数量" },
+                { key: "m_amt", header: "金额" },
+              ],
+            },
+          ],
+        },
+      ],
+      data: [{ product: "A", m_qty: 1, m_amt: 2 }],
+      merges: [{ row: 0, col: 0, rowspan: 1, colspan: 2 }],
+    };
+
+    const result = await exportWithSheetJS(opts, performance.now(), "test");
+    expect(result.success).toBe(true);
+
+    const wb = await readBuffer(
+      new Uint8Array(await result.blob!.arrayBuffer()),
+    );
+    const ws = wb.getSheet("Sheet1")!;
+    // 3 header rows (收入情况 > 本月 > 数量/金额) + 1 data row.
+    expect(ws.rowCount).toBe(4);
+    expect(ws.cell("A1").value).toBe("产品");
+    expect(ws.cell("B1").value).toBe("收入情况");
+    expect(ws.cell("B2").value).toBe("本月");
+    expect(ws.cell("B3").value).toBe("数量");
+    // Leaf header A1:A3, groups B1:C1 / B2:C2, data merge A4:B4 (row 0 data-relative).
+    for (const r of ["A1:A3", "B1:C1", "B2:C2", "A4:B4"]) {
+      expect(ws.mergeCells).toContain(r);
+    }
   });
 
   it("honours multiple sheets in rowCount accounting", async () => {

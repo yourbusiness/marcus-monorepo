@@ -57,15 +57,26 @@ export type FormatSpec =
   | { type: "number"; decimals?: number; thousands?: boolean }
   | { type: "padding"; fill: string; length: number; align?: "left" | "right" };
 
-/** Column configuration. */
+/** Column configuration. A column with `children` is a group header; leaf columns produce data cells. */
 export interface ColumnConfig {
-  key: string;
+  /**
+   * Data row field name. Required for leaf columns (validated at export time);
+   * group columns (with `children`) may omit it.
+   */
+  key?: string;
+  /** Header text (leaf or group). */
   header: string;
-  /** Column width in Excel character units. Mapped to ws.setColumnWidth(col, width) (1-based). */
+  /**
+   * Group header: the column tree becomes multi-row headers, and each group
+   * header cell is merged across its descendant leaf columns. `children: []`
+   * is treated as a leaf column.
+   */
+  children?: ColumnConfig[];
+  /** Column width in Excel character units. Leaf columns only. Mapped to ws.setColumnWidth(col, width) (1-based). */
   width?: number;
-  /** Style applied to all data cells in this column (not the header). */
+  /** Style applied to all data cells in this column (not the header). Leaf columns only. */
   style?: CellStyle;
-  /** Style applied to this column's header cell. Takes precedence over SheetConfig.headerStyle. */
+  /** Style applied to this column's header cell(s). Takes precedence over SheetConfig.headerStyle. */
   headerStyle?: CellStyle;
   /**
    * Value formatter: FormatSpec (worker-compatible) or function (main/Node only).

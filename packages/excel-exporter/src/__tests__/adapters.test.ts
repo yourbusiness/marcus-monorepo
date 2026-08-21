@@ -31,6 +31,35 @@ describe("tableToSheet / exportTable", () => {
     expect(sheet.columns[1]).toMatchObject({ key: "customer", header: "客户" });
   });
 
+  it("maps Ant Design grouped columns (children) to a multi-row header", () => {
+    const sheet = tableToSheet({
+      sheetName: "Grouped",
+      columns: [
+        { dataIndex: "product", title: "产品" },
+        {
+          title: "收入情况",
+          children: [
+            { dataIndex: "m_qty", title: "数量" },
+            { dataIndex: "m_amt", title: "金额" },
+          ],
+        },
+      ],
+      data: [{ product: "A", m_qty: 1, m_amt: 2 }],
+    });
+
+    // Leaf keeps key/header.
+    expect(sheet.columns[0]).toMatchObject({ key: "product", header: "产品" });
+    // Group has header + children, no key (no data cells).
+    expect(sheet.columns[1]).toMatchObject({
+      header: "收入情况",
+      children: [
+        { key: "m_qty", header: "数量" },
+        { key: "m_amt", header: "金额" },
+      ],
+    });
+    expect(sheet.columns[1].key).toBeUndefined();
+  });
+
   it("exports a real xlsx from a common table data shape", async () => {
     const result = await exportTable({
       filename: "table-adapter",

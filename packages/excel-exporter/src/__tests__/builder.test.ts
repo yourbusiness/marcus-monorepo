@@ -73,6 +73,102 @@ describe("WorkbookBuilder round-trip", () => {
     expect(ws.mergeCells.some((r) => r === "A2:A3")).toBe(true);
   });
 
+  it("writes a multi-row grouped header with header merges and data offset", async () => {
+    const builder = await WorkbookBuilder.create();
+    builder.addSheet({
+      name: "Grouped",
+      freezeRows: 2,
+      autoFilter: true,
+      columns: [
+        { key: "product", header: "产品" },
+        {
+          header: "收入情况",
+          children: [
+            {
+              header: "本月",
+              children: [
+                { key: "m_qty", header: "数量" },
+                { key: "m_amt", header: "金额" },
+              ],
+            },
+            {
+              header: "本年累计",
+              children: [
+                { key: "y_qty", header: "数量" },
+                { key: "y_amt", header: "金额" },
+              ],
+            },
+          ],
+        },
+      ],
+      data: [
+        { product: "A", m_qty: 1, m_amt: 2, y_qty: 3, y_amt: 4 },
+        { product: "B", m_qty: 5, m_amt: 6, y_qty: 7, y_amt: 8 },
+      ],
+    });
+    const bytes = await builder.toBuffer();
+    const wb = await readBuffer(bytes);
+    const ws = wb.getSheet("Grouped")!;
+
+    // 3 header rows + 2 data rows.
+    expect(ws.rowCount).toBe(5);
+
+    // Header values at their merge anchors (top-left of each merged block).
+    expect(ws.cell("A1").value).toBe("产品");
+    expect(ws.cell("B1").value).toBe("收入情况");
+    expect(ws.cell("B2").value).toBe("本月");
+    expect(ws.cell("D2").value).toBe("本年累计");
+    expect(ws.cell("B3").value).toBe("数量");
+    expect(ws.cell("E3").value).toBe("金额");
+
+    // Header merges (leaf spans all header rows, groups span their leaves).
+    for (const r of ["A1:A3", "B1:E1", "B2:C2", "D2:E2"]) {
+      expect(ws.mergeCells).toContain(r);
+    }
+
+    // Data rows start at row 4.
+    expect(ws.cell("A4").value).toBe("A");
+    expect(ws.cell("E5").value).toBe(8);
+
+    // Auto-filter now anchors on the last header row: A3:E5.
+    expect((ws.autoFilter as { range: string }).range).toBe("A3:E5");
+  });
+
+  it("applies header styles to merged group/leaf anchors in a grouped header", async () => {
+    const builder = await WorkbookBuilder.create();
+    builder.addSheet({
+      name: "GroupedStyle",
+      headerStyle: StylePresets.header,
+      columns: [
+        {
+          key: "a",
+          header: "A",
+          headerStyle: StylePresets.danger,
+        },
+        {
+          header: "G",
+          headerStyle: StylePresets.currency, // group-level style
+          children: [
+            { key: "b", header: "B" },
+            { key: "c", header: "C" },
+          ],
+        },
+      ],
+      data: [{ a: 1, b: 2, c: 3 }],
+    });
+    const bytes = await builder.toBuffer();
+    const wb = await readBuffer(bytes);
+    const ws = wb.getSheet("GroupedStyle")!;
+
+    // Leaf header overrides sheet-level; group header uses its own style; the
+    // child leaf B inherits the sheet-level header style.
+    expect(ws.cell("A1").styleIndex).not.toBeNull();
+    expect(ws.cell("B1").styleIndex).not.toBeNull();
+    expect(ws.cell("B2").styleIndex).not.toBeNull();
+    // Data cells never take header styles.
+    expect(ws.cell("A3").styleIndex).toBeNull();
+  });
+
   it("handles multiple sheets", async () => {
     const builder = await WorkbookBuilder.create();
     builder
