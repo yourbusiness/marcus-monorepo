@@ -272,10 +272,10 @@ describe.runIf(RUN_PERF)("performance ...", () => { ... });
 
 所以策略是：**性能测试在本地当"看门狗"跑，CI 里跳过，避免假报警**。
 
-历史上这里还有一个 `PERF_TIGHT` 设计（同一文件里 `SLACK` 那行）：本地想跑严格模式可以设 `PERF_TIGHT=1`。该机制现已移除——`SLACK` 目前恒为 1.0，`PERF_TIGHT` 不再产生任何效果（turbo.json 的 `globalEnv` 里仍保留声明，属残留）。而 [turbo.json](../turbo.json) 的 `globalEnv` 里列了 `RUN_PERF` 和 `PERF_TIGHT`：
+历史上这里还有一个 `PERF_TIGHT` 设计（同一文件里 `SLACK` 那行）：本地想跑严格模式可以设 `PERF_TIGHT=1`。该机制现已移除——`SLACK` 目前恒为 1.0，`PERF_TIGHT` 不再产生任何效果（turbo.json `globalEnv` 里的残留声明亦已删除）。而 [turbo.json](../turbo.json) 的 `globalEnv` 里列了 `RUN_PERF`：
 
 ```json
-"globalEnv": ["NODE_ENV", "CI", "PERF_TIGHT", "RUN_PERF", "DOCS_BASE"]
+"globalEnv": ["NODE_ENV", "CI", "RUN_PERF", "DOCS_BASE"]
 ```
 
 为什么要列出来？因为 Turborepo 是靠这些环境变量来决定**缓存能不能复用**的。把这些变量登记进去，Turborepo 才知道"换了 `RUN_PERF` 的值，缓存就得重新算"。git 历史里有一条提交 `87855d6 fix(turbo): declare RUN_PERF in globalEnv so CI can skip perf tests` 就是在修这个坑。

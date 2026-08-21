@@ -94,11 +94,23 @@ export async function exportExcel(
   const start = performance.now();
   const totalRows = options.sheets.reduce((s, sh) => s + sh.data.length, 0);
 
+  // Leading 0 fires exactly once here, on every route (the SheetJS fallback
+  // included), so consumers always see the documented 0 -> ... -> 1 pair.
+  options.onProgress?.(0);
+
+  // The SheetJS fallback never reports progress itself; closing the sequence
+  // here keeps the terminal-1 contract true on degraded routes too, including
+  // when the fallback itself fails and resolves with success: false.
+  const finishWithSheetJS = (reason: string): Promise<ExportResult> =>
+    exportWithSheetJS(options, start, reason).finally(() =>
+      options.onProgress?.(1),
+    );
+
   const picked = pickMode(options, totalRows);
   const needsWasm = picked.workerMode !== "stream";
   const loader = getWasmLoader();
   if (needsWasm && !loader.supported) {
-    return exportWithSheetJS(options, start, "WebAssembly not supported");
+    return finishWithSheetJS("WebAssembly not supported");
   }
 
   // Node main/stream: execute directly on this thread (no Web Worker available).
@@ -116,7 +128,6 @@ export async function exportExcel(
         // public phase sequence remains stable across main/stream routes.
         options.onPhase?.("init", 0);
       }
-      options.onProgress?.(0);
       let result: ExportResult;
       const buildStart = performance.now();
       try {
@@ -161,13 +172,12 @@ export async function exportExcel(
       }
       return result;
     } catch (e) {
-      return exportWithSheetJS(options, start, (e as Error).message);
+      return finishWithSheetJS((e as Error).message);
     }
   }
 
   // Browser worker mode: offload to worker (main thread does one structured clone).
   try {
-    options.onProgress?.(0);
     const result = await exportInWorker(options, picked.workerMode!);
     options.onProgress?.(1);
     if (result.success) {
@@ -180,13 +190,9 @@ export async function exportExcel(
     }
     // Worker export failed (e.g. WASM init error inside the worker) -> degrade
     // to SheetJS, matching the main-thread path's failure handling.
-    return exportWithSheetJS(
-      options,
-      start,
-      result.error?.message ?? "worker export failed",
-    );
+    return finishWithSheetJS(result.error?.message ?? "worker export failed");
   } catch (e) {
-    return exportWithSheetJS(options, start, (e as Error).message);
+    return finishWithSheetJS((e as Error).message);
   }
 }
 

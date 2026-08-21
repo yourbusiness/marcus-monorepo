@@ -45,7 +45,8 @@ await exportExcel({
 await exportExcel({
   ...,
   onProgress: (progress) => {
-    // 0 → 1；分段进度仅 stream 路径有（每 1000 行上报一次），main 与 worker+Workbook 只回调首尾
+    // 0 → 1；首尾 0 与 1 由 exportExcel 在所有路径（含 SheetJS 兜底）各上报一次；
+    // 分段进度仅 stream 路径有（每 1000 行上报一次）
     bar.style.width = `${progress * 100}%`;
   },
   onPhase: (phase, durationMs) => {

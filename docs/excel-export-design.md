@@ -12,6 +12,8 @@
 
 > 🔄 **v2.7（跨路径日期口径统一 + wasm-loader 错误恢复修复 + 快照补齐，2026-08-18）**：① **日期 UTC 口径统一**——`formatDateByPattern` 原用本地分量，与 Workbook 路径 `dateToSerial`（UTC 分量）相反，非 UTC 时区下同一输入跨 5 万行阈值（及降级前后）可相差一天（UTC+8 本地 0 点的 Date 在 Workbook 路径显示前一天，实测 serialToDate 为前一日 16:00）。现改用 UTC 分量，三路径（Workbook/Stream/SheetJS）在任何时区输出一致；输入契约（ISO 字符串/`Date.UTC` 优先）已写入 `types.ts` JSDoc 与文档站。② **wasm-loader error 态修复**——原实现仅 `wasmUrl` 变化才重置 error 态，错误信息建议的「call configureWasm() to retry」实际不可行；现任何 `configureWasm` 调用都会清除 error 态并按新配置重试（ready/loading 态不受影响）。③ **stream 进度去重**——`exportFastXlsx` 不再自行上报最终 `onProgress(1)`，由 `exportExcel` 统一收尾，stream 路径不再出现两次 1。④ **快照补齐**——4.4/4.5/4.6/4.7/4.8(fast-xlsx)/4.11/4.12/4.13 的嵌入源码整体替换为现行实现（4.5 旧块无代码围栏且 JSDoc 标记损坏，一并修复）；4.2 两处与快照矛盾的文字、4.5 的 Node 初始化建议（改 `initWasmSync`）、1.2/7.3 的旧 StreamingXlsxWriter 成本模型残留、7.1 测试表均已对齐现状。
 
+> 🔄 **v2.8（onProgress 兜底收尾 + sharedStrings count 规范修正 + PERF_TIGHT 残留清理，2026-08-21）**：① **onProgress 兜底契约修复（代码）**——v2.7 ③ 只统一了成功路径的收尾；SheetJS 兜底路径（WASM 不支持早退 / 主线程与 Worker 失败降级）此前 0 与 1 均不上报或只报 0，与 `types.ts`「final 1 由 exportExcel 恰好上报一次」的契约不符。现 `exportExcel` 在入口统一上报 0，兜底调用经 `.finally` 统一收尾 1（兜底自身失败亦收尾）。② **sharedStrings `count` 规范修正（代码）**——fast-xlsx 原 `count`/`uniqueCount` 同填去重数，不符合 ECMA-376（count 应为含重复的总引用数）；现按引用计数。③ **PERF_TIGHT 残留清理（代码/配置）**——`SLACK` 恒等式（两分支同为 1.0）删除，`turbo.json` globalEnv 残留声明移除。④ 4.4/4.5/4.8/4.10/7.2/3.6 快照同步；`maxRetries` 语义措辞统一为「尝试次数（共 3 次含首次）」；测试数 52→54（CI 实跑 48→50，新增兜底进度与 sst 规范两个回归用例）。
+
 > 🚨🚨🚨 **v2.0 评审修正（基于二次独立实测 + 源码核对，修正 v1.9 遗留的错误数字、内部矛盾与代码缺陷）**
 >
 > v1.9 用独立进程实测发现了 toBuffer 塌方（方向正确，已二次复现确认），但 v1.9 自身遗留三类问题：(A) 几个被夸大/记串的数字；(B) 文档内部前后矛盾（5.3 调度表是 v1.8 残留、4.9 format 两段自相矛盾）；(C) 代码缺陷（format 联合类型调用会运行时崩溃）。v2.0 逐一修正，并将性能验收口径对齐**真实可达水平**（原 5万<500ms / 10万<1000ms 的硬指标经实测证明在 modern-xlsx 下结构性不可达，见 1.2 说明）。
@@ -342,7 +344,7 @@ engine-strict=false
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["tsconfig.base.json"],
-  "globalEnv": ["NODE_ENV", "CI", "PERF_TIGHT", "RUN_PERF", "DOCS_BASE"],
+  "globalEnv": ["NODE_ENV", "CI", "RUN_PERF", "DOCS_BASE"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -370,7 +372,7 @@ engine-strict=false
 
 > `build.dependsOn: ["^build"]` 表示「先构建依赖的内部包，再构建当前包」。`excel-exporter` 不依赖其他内部包，但保留此约定以便未来 `pdf-exporter` 依赖 `excel-exporter` 时自动排序（`apps/docs` 已实际依赖 `excel-exporter` 的构建产物，`^build` 编排生效）。
 >
-> **`globalEnv` 含 `PERF_TIGHT` / `RUN_PERF`**：`RUN_PERF=0` 跳过性能用例（CI 设此值，本地默认跑）。`PERF_TIGHT=1` 曾把容差从默认 1.5x 收紧到 1.0x，该机制现已移除——现行 `performance.test.ts` 的 `SLACK` 恒为 1.0（见 7.2），turbo.json 里的 `PERF_TIGHT` 声明属残留。`test` 任务不设 `dependsOn`（基准直接跑源码）、`outputs: []`；`lint`/`typecheck`/`dev` 现也声明了 `dependsOn: ["^build"]`。v2.0 曾设 `test:browser` 任务，本仓库当前无浏览器测试，v2.1 已删除。
+> **`globalEnv` 含 `RUN_PERF`**：`RUN_PERF=0` 跳过性能用例（CI 设此值，本地默认跑）。历史上有 `PERF_TIGHT=1` 容差收紧机制（1.5x → 1.0x），已随 CI 跳过策略移除——现行 `performance.test.ts` 的 `SLACK` 恒为 1.0（见 7.2），`globalEnv` 里的 `PERF_TIGHT` 残留声明亦已于 v2.8 一并移除。`test` 任务不设 `dependsOn`（基准直接跑源码）、`outputs: []`；`lint`/`typecheck`/`dev` 现也声明了 `dependsOn: ["^build"]`。v2.0 曾设 `test:browser` 任务，本仓库当前无浏览器测试，v2.1 已删除。
 
 ### 3.7 根 `tsconfig.base.json`
 
@@ -947,9 +949,11 @@ export interface ExportOptions {
   /** Mode selection: auto = auto-decide by row count (default). */
   mode?: ExportMode;
   /**
-   * Progress callback (0-1). The stream path reports intermediate values every
-   * 1,000 rows; other paths report only the trailing pair 0 and 1. The final 1
-   * is emitted exactly once by `exportExcel` itself.
+   * Progress callback (0-1). The leading 0 and the trailing 1 are each emitted
+   * exactly once by `exportExcel` itself, on every route — including the
+   * SheetJS fallback and exports that ultimately fail — so a progress UI can
+   * always be closed on the final 1. The stream path additionally reports
+   * intermediate values every 1,000 rows.
    */
   onProgress?: (progress: number) => void;
   /**
@@ -1210,7 +1214,7 @@ export interface LoaderOptions {
   workerUrl?: string | URL;
   /** Per-attempt load timeout, default 10s. */
   timeoutMs?: number;
-  /** Max retries, default 3. */
+  /** Max load attempts (total, including the first), default 3. */
   maxRetries?: number;
 }
 
@@ -1619,16 +1623,23 @@ export interface FastXlsxResult {
 interface SharedStringTable {
   map: Map<string, number>;
   parts: string[];
+  /** Total string-cell references, duplicates included (ECMA-376 sst@count). */
+  uses: number;
   intern(value: string): number;
 }
 
 function createSharedStringTable(): SharedStringTable {
   const map = new Map<string, number>();
   const parts: string[] = [];
+  let uses = 0;
   return {
     map,
     parts,
+    get uses(): number {
+      return uses;
+    },
     intern(value: string): number {
+      uses += 1;
       const existing = map.get(value);
       if (existing !== undefined) return existing;
       const index = map.size;
@@ -1846,7 +1857,7 @@ export function exportFastXlsx(
     `<Relationships xmlns="${REL_NS}">${workbookRels.join("")}</Relationships>`;
   const sharedStringsXml = hasSharedStrings
     ? XML_DECL +
-      `<sst xmlns="${MAIN_NS}" count="${stringTable.parts.length}" uniqueCount="${stringTable.parts.length}">${stringTable.parts.join(
+      `<sst xmlns="${MAIN_NS}" count="${stringTable.uses}" uniqueCount="${stringTable.parts.length}">${stringTable.parts.join(
         "",
       )}</sst>`
     : null;
@@ -2380,11 +2391,23 @@ export async function exportExcel(
   const start = performance.now();
   const totalRows = options.sheets.reduce((s, sh) => s + sh.data.length, 0);
 
+  // Leading 0 fires exactly once here, on every route (the SheetJS fallback
+  // included), so consumers always see the documented 0 -> ... -> 1 pair.
+  options.onProgress?.(0);
+
+  // The SheetJS fallback never reports progress itself; closing the sequence
+  // here keeps the terminal-1 contract true on degraded routes too, including
+  // when the fallback itself fails and resolves with success: false.
+  const finishWithSheetJS = (reason: string): Promise<ExportResult> =>
+    exportWithSheetJS(options, start, reason).finally(() =>
+      options.onProgress?.(1),
+    );
+
   const picked = pickMode(options, totalRows);
   const needsWasm = picked.workerMode !== "stream";
   const loader = getWasmLoader();
   if (needsWasm && !loader.supported) {
-    return exportWithSheetJS(options, start, "WebAssembly not supported");
+    return finishWithSheetJS("WebAssembly not supported");
   }
 
   // Node main/stream: execute directly on this thread (no Web Worker available).
@@ -2402,7 +2425,6 @@ export async function exportExcel(
         // public phase sequence remains stable across main/stream routes.
         options.onPhase?.("init", 0);
       }
-      options.onProgress?.(0);
       let result: ExportResult;
       const buildStart = performance.now();
       try {
@@ -2447,13 +2469,12 @@ export async function exportExcel(
       }
       return result;
     } catch (e) {
-      return exportWithSheetJS(options, start, (e as Error).message);
+      return finishWithSheetJS((e as Error).message);
     }
   }
 
   // Browser worker mode: offload to worker (main thread does one structured clone).
   try {
-    options.onProgress?.(0);
     const result = await exportInWorker(options, picked.workerMode!);
     options.onProgress?.(1);
     if (result.success) {
@@ -2466,13 +2487,9 @@ export async function exportExcel(
     }
     // Worker export failed (e.g. WASM init error inside the worker) -> degrade
     // to SheetJS, matching the main-thread path's failure handling.
-    return exportWithSheetJS(
-      options,
-      start,
-      result.error?.message ?? "worker export failed",
-    );
+    return finishWithSheetJS(result.error?.message ?? "worker export failed");
   } catch (e) {
-    return exportWithSheetJS(options, start, (e as Error).message);
+    return finishWithSheetJS((e as Error).message);
   }
 }
 
@@ -2987,9 +3004,9 @@ await exportExcel({
 | `format.test.ts`                              | applyFormat/displayValue/FormatSpec 各类型；日期 UTC 口径跨路径一致（v2.7 新增）                                    |
 | `wasm-loader.test.ts`                         | error 态下任意 `configureWasm` 可重试、URL 变更重初始化、同 URL 不重复初始化（vi.mock 注入 modern-xlsx，v2.7 新增） |
 | `builder.test.ts`                             | aoa 批量写入结果正确（行列、表头、样式、冻结、合并、headerStyle）                                                   |
-| `stream.test.ts`                              | fast-xlsx 数据完整性、日期 pattern 字符串（UTC 口径）                                                               |
+| `stream.test.ts`                              | fast-xlsx 数据完整性、日期 pattern 字符串（UTC 口径）、sharedStrings count/uniqueCount 规范（v2.8 新增）            |
 | `fallback.test.ts`                            | SheetJS 降级产出非空 Blob、`engine: "sheetjs"`、多 sheet rowCount                                                   |
-| `adapters/routing/phases/performance.test.ts` | table/echarts 适配器、pickMode 路由阈值、onPhase 阶段序列、性能基准                                                 |
+| `adapters/routing/phases/performance.test.ts` | table/echarts 适配器、pickMode 路由阈值、兜底路径 onProgress 收尾（v2.8 新增）、onPhase 阶段序列、性能基准          |
 
 ### 7.2 性能基准测试（关键验收）
 
@@ -3007,9 +3024,10 @@ import { exportExcel } from "../index";
 import { makeData, fourCols } from "./setup";
 
 // CI skips these tests (RUN_PERF=0), so the local threshold is exactly the
-// product SLA. Keep PERF_TIGHT for CI/local overrides if a future pipeline
-// decides to run them on shared hardware.
-const SLACK = Number(process.env.PERF_TIGHT ?? 1) > 0 ? 1.0 : 1.0;
+// product SLA — no environment-based slack. If a future pipeline decides to
+// run them on shared hardware, introduce an explicit slack factor then (and
+// list its env var in turbo.json globalEnv).
+const SLACK = 1.0;
 
 // Perf 基线只在本地当回归看门狗；CI shared runner 抖动大，跑它只会 flake。
 // 本地默认跑；设 RUN_PERF=0 跳过（CI 里用）。
@@ -3122,7 +3140,7 @@ describe.runIf(RUN_PERF)(
 // cache (documented 28x first/hot gap). The 50k stream threshold is conservative.
 ```
 
-> **容差（v2.6 对齐源码）**：`SLACK` 恒为 1.0——本地阈值即产品 SLA 本身（10k <200ms / 50k <500ms / 100k <1000ms）。历史版本的「默认 1.5x、`PERF_TIGHT=1` 收紧到 1.0x」机制已随 CI 跳过策略移除（`PERF_TIGHT` 现无效果，保留读取仅为兼容）。CI 以 `RUN_PERF=0` 跳过整套性能基准。`beforeAll` 的预热避免把 `initWasm()` 的编译耗时计入首个 case——否则首个 case 会无端超阈值 100ms+。
+> **容差（v2.8 对齐源码）**：`SLACK` 恒为 1.0——本地阈值即产品 SLA 本身（10k <200ms / 50k <500ms / 100k <1000ms）。历史版本的「默认 1.5x、`PERF_TIGHT=1` 收紧到 1.0x」机制已随 CI 跳过策略移除；v2.8 起 `PERF_TIGHT` 的恒等式读取（两分支同为 1.0）与 turbo.json `globalEnv` 残留声明一并删除。CI 以 `RUN_PERF=0` 跳过整套性能基准。`beforeAll` 的预热避免把 `initWasm()` 的编译耗时计入首个 case——否则首个 case 会无端超阈值 100ms+。
 >
 > **worker 模式为何不在 Node 测试（M5 修正）**：经源码核实，`modern-xlsx.worker.js` 与本库 `export.worker.ts` 都用 Web Worker 全局（`globalThis.addEventListener('message')` / `self.onmessage` / `postMessage`），Node 的 `worker_threads` 用 `parentPort`，两者不兼容。因此 5 万行（worker 路径）与 10 万行带样式（worker 路径）的**端到端耗时 + 主线程阻塞 ≤16ms** 必须在 7.3 的浏览器集成测试（Playwright）中验收。Node 套件的 50k/100k case 仅作 core 回归下限，**不能当作 worker 端到端验收通过的依据**——worker 端到端 = core 工作量 + 入向结构化克隆（5 万行 35-100ms，见附录 A）+ Worker 启动 + 出向回传，系统性高于 Node 测出的数值。
 
@@ -3358,13 +3376,13 @@ const blob = new Blob([bytes], {
 
 ---
 
-**文档版本**：v2.6 ｜ **核对基准**：modern-xlsx@1.2.0（npm tarball 解包 + `dist/index.d.mts` + `dist/validate-chart-D1O7LOfU.d.mts` 类型定义 + `dist/utils-Fc_qcAP_.mjs` / `dist/modern-xlsx.worker.js` 源码）+ **Node v22.22.2 独立进程二次实测**（toBuffer 塌方/stream/结构化克隆/finish 分步，共 30+ 次）+ **v2.6 仓库源码逐文件比对**（`packages/excel-exporter/src`，快照与源码 diff 一致）｜ **最后更新**：2026-08-17（v2.6 源码再对齐：WORKER_THRESHOLD 20,000、fast-xlsx/worker 快照刷新、PERF_TIGHT 机制移除说明；历史见文末修订历史）
+**文档版本**：v2.8 ｜ **核对基准**：modern-xlsx@1.2.0（npm tarball 解包 + `dist/index.d.mts` + `dist/validate-chart-D1O7LOfU.d.mts` 类型定义 + `dist/utils-Fc_qcAP_.mjs` / `dist/modern-xlsx.worker.js` 源码）+ **Node v22.22.2 独立进程二次实测**（toBuffer 塌方/stream/结构化克隆/finish 分步，共 30+ 次）+ **v2.6 仓库源码逐文件比对**（`packages/excel-exporter/src`，快照与源码 diff 一致）｜ **最后更新**：2026-08-21（v2.8：onProgress 兜底收尾修复、sharedStrings count 规范修正、PERF_TIGHT 残留清理；v2.7 的版本标签此前未同步到本行，一并修正。历史见文末修订历史）
 
 ---
 
 ### 附录 F · Node 版本与补充依赖（v2.1 重写）
 
-> **本仓库用 Node 22，不升级到 24**：`@marcusok/excel-exporter` 与 monorepo 根的 `engines.node` 均为 `>=22.0.0`，`.nvmrc` 锁定 `22`，CI `node-version: 22`。核心依赖 modern-xlsx@1.2.0 的 `engines.node` 声明为 `>=24.0.0`，但其 WASM 核心面向浏览器、与 Node 版本无关；本仓库在 Node 22（v22.22.2）下 `lint/typecheck/test/build` 全绿（52 个用例实测通过；CI 以 `RUN_PERF=0` 跳过 4 个性能基准、实跑 48 个，2026-08 更新）。注意：modern-xlsx README 无 "Node Usage" 章节，其顶部声明要求 "Node.js 24+"，Node 22 可用性由本仓库测试实测而非 README 声明。`.npmrc` 设 `engine-strict=false`，避免 modern-xlsx 的 engines 声明在 Node 22 下阻断 `pnpm install`（见 3.5）。本地推荐 fnm/nvm 并 `fnm use`（读 `.nvmrc`）。
+> **本仓库用 Node 22，不升级到 24**：`@marcusok/excel-exporter` 与 monorepo 根的 `engines.node` 均为 `>=22.0.0`，`.nvmrc` 锁定 `22`，CI `node-version: 22`。核心依赖 modern-xlsx@1.2.0 的 `engines.node` 声明为 `>=24.0.0`，但其 WASM 核心面向浏览器、与 Node 版本无关；本仓库在 Node 22（v22.22.2）下 `lint/typecheck/test/build` 全绿（54 个用例实测通过；CI 以 `RUN_PERF=0` 跳过 4 个性能基准、实跑 50 个，2026-08-21 更新）。注意：modern-xlsx README 无 "Node Usage" 章节，其顶部声明要求 "Node.js 24+"，Node 22 可用性由本仓库测试实测而非 README 声明。`.npmrc` 设 `engine-strict=false`，避免 modern-xlsx 的 engines 声明在 Node 22 下阻断 `pnpm install`（见 3.5）。本地推荐 fnm/nvm 并 `fnm use`（读 `.nvmrc`）。
 >
 > v2.0 曾把 `@playwright/test`（`^1.62.0`）列入「补充依赖」、并写「Node 24+ 升级指引」，二者均与实际仓库不符（本仓库无 Playwright、CI 跑 Node 22），v2.1 已删除该依赖行与升级指引。关于 `unplugin`：6.2 的 Vite 插件是 Vite 原生插件对象（`{ name, buildStart() }`），全程未 import `unplugin`；若未来要让资源拷贝同时支持 Webpack，再按需引入。
 
@@ -3380,6 +3398,11 @@ const blob = new Blob([bytes], {
 
 ### 修订历史
 
+- **v2.8（onProgress 兜底收尾 + sharedStrings count 规范修正 + PERF_TIGHT 残留清理，2026-08-21）**：
+  - **P1 · onProgress 兜底路径不收尾（代码修复）**：`types.ts` 契约称「final 1 由 `exportExcel` 恰好上报一次」，但三条 SheetJS 兜底路径（`needsWasm && !supported` 早退、主线程 catch、Worker 失败/抛错）均不上报 1，早退路径连 0 也不上报。修复：`exportExcel` 入口统一上报 0（原先散落在 main 路径 init 后与 worker 路径入口的两处 0 移除），兜底统一经 `finishWithSheetJS = exportWithSheetJS(...).finally(() => onProgress(1))` 收尾——兜底自身失败（`success:false`）也收尾，消费方进度 UI 可确定性关闭。新增回归用例：`vi.stubGlobal("WebAssembly", undefined)` 强制早退降级，断言 `progress === [0, 1]`（旧代码下为 `[]`，必然失败）。
+  - **P2 · fast-xlsx sharedStrings `count` 不符合 ECMA-376（代码修复）**：`<sst count uniqueCount>` 两属性原同填去重数；规范要求 count 为含重复的总字符串引用数。修复：`SharedStringTable` 增加 `uses` 引用计数（每次 intern 自增，含命中缓存），`count` 改填 `uses`。新增回归用例：解包产物断言 `count="8"`（2 表头 + 6 数据格引用）与 `uniqueCount="6"`（旧代码 count="6"，必然失败）。
+  - **P3 · PERF_TIGHT 恒等式与 globalEnv 残留（清理）**：`performance.test.ts` 的 `SLACK` 三元两分支同为 1.0（注释却称保留 PERF_TIGHT 供覆盖，与 7.2 v2.6 容差注「现无效果」自相矛盾）；`turbo.json` globalEnv 的 `PERF_TIGHT` 声明属残留（ci-workflow-analysis.md 亦有记载）。清理：`SLACK = 1.0` 直赋、注释改为如实描述；globalEnv 移除该条目。
+  - **文档同步**：4.4（types onProgress JSDoc）/4.5（wasm-loader maxRetries 注释：改「尝试次数，共 3 次含首次」）/4.8（fast-xlsx SharedStringTable 与 sst 行）/4.10（index.ts exportExcel 主体）/7.2（SLACK 行）/3.6（turbo.json 快照与 globalEnv 注记）快照对齐；7.2 容差注更新为 v2.8；文档站 api/01（onProgress、maxRetries 行）与 guide/08、guide/10（zh/en）同步；README 测试数 52→54（CI 实跑 48→50）；附录 F 测试数与「文档版本/最后更新」行同步（该行此前停留在 v2.6，v2.7 时漏更，一并修正）。
 - **v2.7（跨路径日期口径统一 + wasm-loader 错误恢复修复 + 快照补齐，2026-08-18）**：
   - **P0 · 日期跨路径口径不一致（代码修复 + 实测确认）**：Workbook 路径 `applyFormat` date/datetime 走 modern-xlsx `dateToSerial`（内部 `toUtcMs` 取 **UTC 分量**，已核实 dist 源码），而 Stream/SheetJS 路径 `formatDateByPattern` 原取**本地分量**——同一输入两条路径显示可差一天（实测：UTC+8 下 `new Date(2025,0,5)` 本地 0 点经 Workbook 路径 serial=45661.6667，Excel 显示 2025-01-04；Stream 路径显示 2025-01-05）。既有测试未暴露的原因：round-trip 断言两端都走 UTC 约定，且测试机时区（UTC+8）下测试数据（14:30 / ISO 字符串）恰好不跨日。修复：`formatDateByPattern` 改用 `getUTC*` 分量；相关测试改 UTC 构造（断言与运行时区无关）并新增跨路径一致性回归用例；输入契约写入 `types.ts` JSDoc 与文档站（zh/en）。
   - **P1 · wasm-loader error 态粘滞（代码修复）**：`updateOptions` 原仅在 `wasmUrl` 变化时重置状态，加载失败（error）后按错误信息建议调 `configureWasm({timeoutMs:...})`（URL 不变）不会重试，后续 `ensureLoaded` 永远抛旧错误直接降级 SheetJS。修复：error 态下任何 `configureWasm` 调用都重置为 idle 重试（ready/loading 态语义不变）。新增 `wasm-loader.test.ts`（vi.mock 注入 modern-xlsx，隔离真实 initWasm 幂等性），并导出 `WasmLoader` 类供测试（不进包公开 API）。

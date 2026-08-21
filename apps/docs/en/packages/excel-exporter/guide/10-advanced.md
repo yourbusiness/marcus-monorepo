@@ -45,7 +45,9 @@ Sheet names must satisfy ECMA-376 constraints: non-empty, ≤ 31 characters, and
 await exportExcel({
   ...,
   onProgress: (progress) => {
-    // 0 → 1; incremental progress only on the stream path (every 1000 rows); main and worker+Workbook fire just 0 and 1
+    // 0 → 1; the leading 0 and trailing 1 fire exactly once each on every route
+    // (the SheetJS fallback included); incremental progress only on the stream
+    // path (every 1000 rows)
     bar.style.width = `${progress * 100}%`;
   },
   onPhase: (phase, durationMs) => {

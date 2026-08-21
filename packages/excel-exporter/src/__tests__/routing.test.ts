@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { exportExcel } from "../index";
 import { StylePresets } from "../style-presets";
 // Node's fetch rejects file://, so sync-init the WASM (see setup.ts).
@@ -36,5 +36,32 @@ describe("exportExcel mode routing (Node environment)", () => {
     expect(r.success).toBe(true);
     expect(r.engine).toBe("modern-xlsx");
     expect(r.mode).toBe("stream");
+  });
+
+  it("emits the documented 0 -> 1 onProgress pair even on the SheetJS fallback", async () => {
+    // Force the early-bail fallback (WASM reported unsupported). The fallback
+    // itself never reports progress; exportExcel must still open and close
+    // the sequence exactly once each (types.ts onProgress contract).
+    vi.stubGlobal("WebAssembly", undefined);
+    try {
+      const progress: number[] = [];
+      const r = await exportExcel({
+        filename: "routing-fallback-progress",
+        download: false,
+        sheets: [
+          {
+            name: "S",
+            columns: [{ key: "x", header: "X" }],
+            data: [{ x: 1 }, { x: 2 }],
+          },
+        ],
+        onProgress: (p) => progress.push(p),
+      });
+      expect(r.engine).toBe("sheetjs");
+      expect(r.success).toBe(true);
+      expect(progress).toEqual([0, 1]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

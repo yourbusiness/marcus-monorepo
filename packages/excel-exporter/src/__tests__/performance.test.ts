@@ -3,9 +3,10 @@ import { exportExcel } from "../index";
 import { makeData, fourCols } from "./setup";
 
 // CI skips these tests (RUN_PERF=0), so the local threshold is exactly the
-// product SLA. Keep PERF_TIGHT for CI/local overrides if a future pipeline
-// decides to run them on shared hardware.
-const SLACK = Number(process.env.PERF_TIGHT ?? 1) > 0 ? 1.0 : 1.0;
+// product SLA — no environment-based slack. If a future pipeline decides to
+// run them on shared hardware, introduce an explicit slack factor then (and
+// list its env var in turbo.json globalEnv).
+const SLACK = 1.0;
 
 // Perf 基线只在本地当回归看门狗；CI shared runner 抖动大，跑它只会 flake。
 // 本地默认跑；设 RUN_PERF=0 跳过（CI 里用）。

@@ -136,9 +136,11 @@ export interface ExportOptions {
   /** Mode selection: auto = auto-decide by row count (default). */
   mode?: ExportMode;
   /**
-   * Progress callback (0-1). The stream path reports intermediate values every
-   * 1,000 rows; other paths report only the trailing pair 0 and 1. The final 1
-   * is emitted exactly once by `exportExcel` itself.
+   * Progress callback (0-1). The leading 0 and the trailing 1 are each emitted
+   * exactly once by `exportExcel` itself, on every route — including the
+   * SheetJS fallback and exports that ultimately fail — so a progress UI can
+   * always be closed on the final 1. The stream path additionally reports
+   * intermediate values every 1,000 rows.
    */
   onProgress?: (progress: number) => void;
   /**

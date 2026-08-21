@@ -21,16 +21,23 @@ export interface FastXlsxResult {
 interface SharedStringTable {
   map: Map<string, number>;
   parts: string[];
+  /** Total string-cell references, duplicates included (ECMA-376 sst@count). */
+  uses: number;
   intern(value: string): number;
 }
 
 function createSharedStringTable(): SharedStringTable {
   const map = new Map<string, number>();
   const parts: string[] = [];
+  let uses = 0;
   return {
     map,
     parts,
+    get uses(): number {
+      return uses;
+    },
     intern(value: string): number {
+      uses += 1;
       const existing = map.get(value);
       if (existing !== undefined) return existing;
       const index = map.size;
@@ -248,7 +255,7 @@ export function exportFastXlsx(
     `<Relationships xmlns="${REL_NS}">${workbookRels.join("")}</Relationships>`;
   const sharedStringsXml = hasSharedStrings
     ? XML_DECL +
-      `<sst xmlns="${MAIN_NS}" count="${stringTable.parts.length}" uniqueCount="${stringTable.parts.length}">${stringTable.parts.join(
+      `<sst xmlns="${MAIN_NS}" count="${stringTable.uses}" uniqueCount="${stringTable.parts.length}">${stringTable.parts.join(
         "",
       )}</sst>`
     : null;

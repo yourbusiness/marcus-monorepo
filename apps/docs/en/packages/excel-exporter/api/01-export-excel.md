@@ -10,14 +10,14 @@ The core entry point (convenience wrappers such as `exportTable` / `exportEchart
 
 ## ExportOptions
 
-| Field        | Type                                               | Required | Description                                                                                                        |
-| ------------ | -------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
-| `sheets`     | `SheetConfig[]`                                    | yes      | At least one sheet                                                                                                 |
-| `filename`   | `string`                                           | yes      | Download name; `.xlsx` is appended unless it already ends with it                                                  |
-| `mode`       | `"auto" \| "main" \| "worker" \| "stream"`         | —        | Default `"auto"`                                                                                                   |
-| `onProgress` | `(progress: number) => void`                       | —        | 0 → 1; incremental progress only on the stream path (every 1,000 rows); main and worker+Workbook fire just 0 and 1 |
-| `onPhase`    | `(phase: ExportPhase, durationMs: number) => void` | —        | `init` / `build` / `download` timings                                                                              |
-| `download`   | `boolean`                                          | —        | Default `true`; `false` returns the Blob only                                                                      |
+| Field        | Type                                               | Required | Description                                                                                                                                                                                                                     |
+| ------------ | -------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sheets`     | `SheetConfig[]`                                    | yes      | At least one sheet                                                                                                                                                                                                              |
+| `filename`   | `string`                                           | yes      | Download name; `.xlsx` is appended unless it already ends with it                                                                                                                                                               |
+| `mode`       | `"auto" \| "main" \| "worker" \| "stream"`         | —        | Default `"auto"`                                                                                                                                                                                                                |
+| `onProgress` | `(progress: number) => void`                       | —        | 0 → 1; the leading 0 and trailing 1 are each fired exactly once by `exportExcel` on every route (including the SheetJS fallback and ultimately failed exports); incremental progress only on the stream path (every 1,000 rows) |
+| `onPhase`    | `(phase: ExportPhase, durationMs: number) => void` | —        | `init` / `build` / `download` timings                                                                                                                                                                                           |
+| `download`   | `boolean`                                          | —        | Default `true`; `false` returns the Blob only                                                                                                                                                                                   |
 
 ## ExportResult
 
@@ -37,12 +37,12 @@ The core entry point (convenience wrappers such as `exportTable` / `exportEchart
 configureWasm(options: LoaderOptions): void
 ```
 
-| Field        | Default  | Description                                      |
-| ------------ | -------- | ------------------------------------------------ |
-| `wasmUrl`    | —        | Self-hosted `modern-xlsx.wasm` URL               |
-| `workerUrl`  | —        | `export.worker.js` URL; required for worker mode |
-| `timeoutMs`  | `10_000` | Per-attempt load timeout                         |
-| `maxRetries` | `3`      | Load retries (exponential backoff)               |
+| Field        | Default  | Description                                                      |
+| ------------ | -------- | ---------------------------------------------------------------- |
+| `wasmUrl`    | —        | Self-hosted `modern-xlsx.wasm` URL                               |
+| `workerUrl`  | —        | `export.worker.js` URL; required for worker mode                 |
+| `timeoutMs`  | `10_000` | Per-attempt load timeout                                         |
+| `maxRetries` | `3`      | Max load attempts (3 total incl. the first; 300ms/600ms backoff) |
 
 ## Other exported symbols
 

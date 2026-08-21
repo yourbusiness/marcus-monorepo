@@ -9,7 +9,7 @@ export interface LoaderOptions {
   workerUrl?: string | URL;
   /** Per-attempt load timeout, default 10s. */
   timeoutMs?: number;
-  /** Max retries, default 3. */
+  /** Max load attempts (total, including the first), default 3. */
   maxRetries?: number;
 }
 

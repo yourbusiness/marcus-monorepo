@@ -10,14 +10,14 @@ exportExcel(options: ExportOptions): Promise<ExportResult>
 
 ## ExportOptions
 
-| 字段         | 类型                                               | 必填 | 说明                                                                                             |
-| ------------ | -------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------ |
-| `sheets`     | `SheetConfig[]`                                    | 是   | 工作表配置，至少一个                                                                             |
-| `filename`   | `string`                                           | 是   | 下载文件名，不以 `.xlsx` 结尾时末尾自动追加                                                      |
-| `mode`       | `"auto" \| "main" \| "worker" \| "stream"`         | —    | 默认 `"auto"`，按行数自动路由                                                                    |
-| `onProgress` | `(progress: number) => void`                       | —    | 0 → 1；分段进度仅 stream 路径有（每 1000 行上报一次），main 与 worker+Workbook 只回调首尾 0 与 1 |
-| `onPhase`    | `(phase: ExportPhase, durationMs: number) => void` | —    | `init` / `build` / `download` 阶段耗时                                                           |
-| `download`   | `boolean`                                          | —    | 默认 `true` 触发浏览器下载；`false` 只返回 Blob                                                  |
+| 字段         | 类型                                               | 必填 | 说明                                                                                                                                        |
+| ------------ | -------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sheets`     | `SheetConfig[]`                                    | 是   | 工作表配置，至少一个                                                                                                                        |
+| `filename`   | `string`                                           | 是   | 下载文件名，不以 `.xlsx` 结尾时末尾自动追加                                                                                                 |
+| `mode`       | `"auto" \| "main" \| "worker" \| "stream"`         | —    | 默认 `"auto"`，按行数自动路由                                                                                                               |
+| `onProgress` | `(progress: number) => void`                       | —    | 0 → 1；首尾 0 与 1 由 `exportExcel` 在所有路径各上报一次（含 SheetJS 兜底与最终失败的导出）；分段进度仅 stream 路径有（每 1000 行上报一次） |
+| `onPhase`    | `(phase: ExportPhase, durationMs: number) => void` | —    | `init` / `build` / `download` 阶段耗时                                                                                                      |
+| `download`   | `boolean`                                          | —    | 默认 `true` 触发浏览器下载；`false` 只返回 Blob                                                                                             |
 
 ## ExportResult
 
@@ -37,12 +37,12 @@ exportExcel(options: ExportOptions): Promise<ExportResult>
 configureWasm(options: LoaderOptions): void
 ```
 
-| 字段         | 默认值   | 说明                                     |
-| ------------ | -------- | ---------------------------------------- |
-| `wasmUrl`    | —        | 自托管 `modern-xlsx.wasm` 地址           |
-| `workerUrl`  | —        | `export.worker.js` 地址，worker 模式必填 |
-| `timeoutMs`  | `10_000` | 单次加载超时                             |
-| `maxRetries` | `3`      | 加载重试次数（指数退避）                 |
+| 字段         | 默认值   | 说明                                                    |
+| ------------ | -------- | ------------------------------------------------------- |
+| `wasmUrl`    | —        | 自托管 `modern-xlsx.wasm` 地址                          |
+| `workerUrl`  | —        | `export.worker.js` 地址，worker 模式必填                |
+| `timeoutMs`  | `10_000` | 单次加载超时                                            |
+| `maxRetries` | `3`      | 最大加载尝试次数（默认共 3 次含首次，退避 300ms/600ms） |
 
 ## 其他导出符号
 

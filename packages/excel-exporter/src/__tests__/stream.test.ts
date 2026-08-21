@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { strFromU8, unzipSync } from "fflate";
 import { exportAsStream } from "../streaming-builder";
 import { readBuffer } from "./setup";
 
@@ -79,5 +80,30 @@ describe("exportAsStream round-trip", () => {
     // pattern honored; default datetime pattern applied
     expect(ws.cell("A2").value).toBe("05/01/2025");
     expect(ws.cell("B2").value).toBe("2025-01-05 14:30");
+  });
+
+  it("writes a spec-correct sharedStrings table (count = total refs, uniqueCount = uniques)", async () => {
+    const { bytes } = await exportAsStream([
+      {
+        name: "SST",
+        columns: [
+          { key: "a", header: "A" },
+          { key: "b", header: "B" },
+        ],
+        data: [
+          { a: "dup", b: "x" },
+          { a: "dup", b: "x" },
+          { a: "uniq", b: "y" },
+        ],
+      },
+    ]);
+    // Unzip and inspect the sst directly: per ECMA-376, count is the total
+    // number of string-cell references (duplicates included) and uniqueCount
+    // the number of distinct strings. 2 header cells + 6 data cells = 8 refs;
+    // distinct strings: A, B, dup, uniq, x, y = 6.
+    const files = unzipSync(bytes);
+    const sst = strFromU8(files["xl/sharedStrings.xml"]);
+    expect(sst).toContain('count="8"');
+    expect(sst).toContain('uniqueCount="6"');
   });
 });
